@@ -2,10 +2,7 @@ package com.example.walletmanager.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val WalletBackground = Color(0xFF111615)
+val WalletSurface = Color(0xFF1B2321)
+val WalletGreen = Color(0xFF8BE28B)
+val WalletText = Color(0xFFF1F5F2)
