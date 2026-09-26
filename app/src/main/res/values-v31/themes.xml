@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.WalletManager" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#171613</item>
+        <item name="android:navigationBarColor">#2A2118</item>
+        <item name="android:windowSplashScreenBackground">#171613</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/wallet_logo</item>
+    </style>
+</resources>
