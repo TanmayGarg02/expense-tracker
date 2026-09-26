@@ -4,8 +4,8 @@
     <style name="Theme.WalletManager" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#111615</item>
-        <item name="android:navigationBarColor">#1B2321</item>
+        <item name="android:statusBarColor">#171613</item>
+        <item name="android:navigationBarColor">#2A2118</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>
