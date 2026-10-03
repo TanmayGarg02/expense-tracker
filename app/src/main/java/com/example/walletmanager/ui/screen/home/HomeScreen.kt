@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -54,11 +55,15 @@ import com.example.walletmanager.ui.component.SectionTitle
 import com.example.walletmanager.ui.component.TransactionRow
 import com.example.walletmanager.ui.component.WalletColors
 import com.example.walletmanager.ui.component.WalletPage
+import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.debounceClickable
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.rememberDebouncedClick
+import com.example.walletmanager.ui.component.walletDropdownItem
+import com.example.walletmanager.ui.component.walletDropdownSurface
 import com.example.walletmanager.ui.navigation.CalendarRoute
 import com.example.walletmanager.ui.navigation.PlansRoute
+import com.example.walletmanager.ui.navigation.MoreRoute
 import com.example.walletmanager.ui.navigation.WalletRoute
 import com.example.walletmanager.ui.theme.WalletGreen
 import com.example.walletmanager.ui.theme.WalletSurface
@@ -77,7 +82,6 @@ fun HomeScreen(
     open: (WalletRoute) -> Unit
 ) {
     var transactionDialog by rememberSaveable { mutableStateOf(false) }
-    var salaryDialog by rememberSaveable { mutableStateOf(false) }
     var transactionKind by rememberSaveable { mutableStateOf(TransactionKind.EXPENSE.name) }
     var transferMode by rememberSaveable { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
@@ -104,7 +108,8 @@ fun HomeScreen(
             "Good morning, ${state.profileName}",
             "Here’s your money at a glance",
             profileName = state.profileName,
-            profileImageUri = state.profileImageUri
+            profileImageUri = state.profileImageUri,
+            onProfileClick = { open(MoreRoute(openProfile = true)) }
         )
         Row(
             Modifier.fillMaxWidth(),
@@ -117,7 +122,7 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f)
             )
             HeaderAction(
-                icon = "🔁",
+                icon = "🗓️",
                 label = "Plans",
                 onClick = { open(PlansRoute) },
                 modifier = Modifier.weight(1f)
@@ -152,14 +157,7 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f)
             )
             QuickAction(
-                glyph = "💼",
-                label = "Salary",
-                color = WalletColors.amber,
-                onClick = { salaryDialog = true },
-                modifier = Modifier.weight(1f)
-            )
-            QuickAction(
-                glyph = "🔄",
+                glyph = "🔀",
                 label = "Transfer",
                 color = WalletColors.blue,
                 onClick = {
@@ -231,18 +229,6 @@ fun HomeScreen(
         )
     }
 
-    if (salaryDialog) {
-        TransactionSheet(
-            state = state,
-            initialKind = TransactionKind.INCOME,
-            dismiss = { salaryDialog = false },
-            onSave = addTransaction,
-            onAddCategory = addCategory,
-            onEditCategory = editCategory,
-            onDeleteCategory = deleteCategory
-        )
-    }
-
     transactionToEdit?.let { transaction ->
         TransactionSheet(
             state = state,
@@ -289,7 +275,7 @@ private fun HeaderAction(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(icon, fontSize = 20.sp)
+        Text(icon, fontSize = 18.sp)
         Text(
             text = label,
             modifier = Modifier.padding(start = 8.dp),
@@ -406,11 +392,12 @@ private fun TransactionDialog(
 
     ModalBottomSheet(
         onDismissRequest = dismiss,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
         sheetState = sheetState
     ) {
         Column(
             Modifier
-                .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -443,17 +430,19 @@ private fun TransactionDialog(
             )
             Box {
                 OutlinedButton(
-                    onClick = { accountMenu = true },
+                    onClick = { accountMenu = !accountMenu },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(selectedAccount?.name ?: "Choose account")
                 }
                 DropdownMenu(
                     expanded = accountMenu,
-                    onDismissRequest = { accountMenu = false }
+                    onDismissRequest = { accountMenu = false },
+                    modifier = Modifier.walletDropdownSurface()
                 ) {
                     state.accounts.forEach { account ->
                         DropdownMenuItem(
+                            modifier = Modifier.walletDropdownItem(),
                             text = { Text(account.name) },
                             onClick = {
                                 accountId = account.id
@@ -465,18 +454,20 @@ private fun TransactionDialog(
             }
             Box {
                 OutlinedButton(
-                    onClick = { categoryMenu = true },
+                    onClick = { categoryMenu = !categoryMenu },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(categoryName)
                 }
                 DropdownMenu(
                     expanded = categoryMenu,
-                    onDismissRequest = { categoryMenu = false }
+                    onDismissRequest = { categoryMenu = false },
+                    modifier = Modifier.walletDropdownSurface()
                 ) {
                     state.categories.forEach { category ->
                         val parent = state.categories.firstOrNull { it.id == category.parentId }
                         DropdownMenuItem(
+                            modifier = Modifier.walletDropdownItem(),
                             text = {
                                 Text(
                                     if (parent == null) category.name else "   ${parent.name} · ${category.name}"
@@ -489,6 +480,7 @@ private fun TransactionDialog(
                         )
                     }
                     DropdownMenuItem(
+                        modifier = Modifier.walletDropdownItem(),
                         text = { Text("+ Add category or subcategory") },
                         onClick = {
                             categoryMenu = false
@@ -536,7 +528,7 @@ private fun TransactionDialog(
     }
 
     if (categoryDialog) {
-        CategoryDialog(
+        CategorySheet(
             categories = state.categories,
             selectedCategory = selectedCategory,
             dismiss = { categoryDialog = false },
@@ -548,8 +540,9 @@ private fun TransactionDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryDialog(
+private fun CategorySheet(
     categories: List<Category>,
     selectedCategory: Category?,
     dismiss: () -> Unit,
@@ -563,52 +556,62 @@ private fun CategoryDialog(
         save(name, parentId)
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = dismiss,
-        title = { Text("Add category") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") }
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WalletSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Add category", fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Category Name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("Save under parent category", color = WalletColors.muted)
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = parentId == null,
+                    onClick = { parentId = null },
+                    label = { Text("Main category") }
                 )
-                Text("Save under", color = WalletColors.muted)
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                categories.filter { it.parentId == null }.forEach { category ->
                     FilterChip(
-                        selected = parentId == null,
-                        onClick = { parentId = null },
-                        label = { Text("Main category") }
+                        selected = parentId == category.id,
+                        onClick = { parentId = category.id },
+                        label = { Text(category.name) }
                     )
-                    categories.filter { it.parentId == null }.forEach { category ->
-                        FilterChip(
-                            selected = parentId == category.id,
-                            onClick = { parentId = category.id },
-                            label = { Text(category.name) }
-                        )
-                    }
                 }
             }
-        },
-        confirmButton = {
             Button(
                 onClick = saveCategory,
                 enabled = name.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(WalletGreen)
             ) {
-                Text("Save", color = WalletColors.ink)
+                Text("Save Category", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = dismiss) {
+            TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Cancel")
             }
         }
-    )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SalaryDialog(
+private fun SalarySheet(
     state: WalletUiState,
     dismiss: () -> Unit,
     save: (String, Long, TransactionKind, String, String, String, Long) -> Unit
@@ -630,24 +633,38 @@ private fun SalaryDialog(
         dismiss()
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = dismiss,
-        title = { Text("Add salary") },
-        text = {
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WalletSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Add salary", fontWeight = FontWeight.Bold)
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
-                label = { Text("Net salary") },
-                prefix = { Text("₹ ") }
+                label = { Text("Net salary amount") },
+                prefix = { Text("₹ ") },
+                modifier = Modifier.fillMaxWidth()
             )
-        },
-        confirmButton = {
             Button(
                 onClick = saveSalary,
+                enabled = amount.toDoubleOrNull()?.let { it > 0 } == true,
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(WalletGreen)
             ) {
-                Text("Save salary", color = WalletColors.ink)
+                Text("Save Salary", color = WalletColors.ink, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel")
             }
         }
-    )
+    }
 }

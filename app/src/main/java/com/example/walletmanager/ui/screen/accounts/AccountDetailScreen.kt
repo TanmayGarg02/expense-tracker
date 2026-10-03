@@ -5,14 +5,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,24 +26,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.walletmanager.data.model.Account
 import com.example.walletmanager.data.model.Category
-import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.Transaction
+import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.ui.component.ScreenHeader
 import com.example.walletmanager.ui.component.SectionTitle
 import com.example.walletmanager.ui.component.SummaryCard
 import com.example.walletmanager.ui.component.TransactionRow
+import com.example.walletmanager.ui.component.TransactionSheet
 import com.example.walletmanager.ui.component.WalletColors
 import com.example.walletmanager.ui.component.WalletPage
+import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.debounceClickable
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.rememberDebouncedClick
-import com.example.walletmanager.ui.component.TransactionSheet
 import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletSurface
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountDetailScreen(
     state: WalletUiState,
@@ -121,9 +131,10 @@ fun AccountDetailScreen(
         }
     }
 
-    account?.let { selectedAccount ->
+    val selectedAccount = account
+    if (selectedAccount != null) {
         if (showAccountEditor) {
-            AccountEditorDialog(
+            AccountEditorSheet(
                 initial = selectedAccount,
                 dismiss = { showAccountEditor = false },
                 save = {
@@ -134,41 +145,51 @@ fun AccountDetailScreen(
         }
 
         if (showDeleteConfirmation) {
-            AlertDialog(
+            ModalBottomSheet(
                 onDismissRequest = { showDeleteConfirmation = false },
-                title = { Text("Delete account?") },
-                text = {
-                    Text("This also deletes every transaction stored in this account.")
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                dragHandle = {
+                    WalletSheetBackButton { showDeleteConfirmation = false }
                 },
-                confirmButton = {
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+                containerColor = WalletSurface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Delete account?", fontWeight = FontWeight.Bold)
+                    Text("This also deletes every transaction stored in this account.", color = WalletColors.muted)
                     Button(
                         onClick = {
                             deleteAccount(selectedAccount)
                             showDeleteConfirmation = false
                             goBack()
                         },
+                        modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(WalletColors.red)
                     ) {
-                        Text("Delete")
+                        Text("Delete Account", fontWeight = FontWeight.Bold)
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteConfirmation = false }) {
+                    TextButton(onClick = { showDeleteConfirmation = false }, modifier = Modifier.fillMaxWidth()) {
                         Text("Cancel")
                     }
                 }
-            )
+            }
         }
     }
 
-    transactionToEdit?.let { transaction ->
+    val currentTransactionToEdit = transactionToEdit
+    if (currentTransactionToEdit != null) {
         TransactionSheet(
             state = state,
-            initialTransaction = transaction,
+            initialTransaction = currentTransactionToEdit,
             dismiss = { transactionToEdit = null },
             onSave = { title, amount, kind, category, accountId, note, cashback ->
                 editTransaction(
-                    transaction.copy(
+                    currentTransactionToEdit.copy(
                         title = title,
                         amountMinor = amount,
                         kind = kind,
@@ -193,8 +214,9 @@ fun AccountDetailScreen(
     Spacer(Modifier.height(70.dp))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AccountEditorDialog(
+private fun AccountEditorSheet(
     initial: Account,
     dismiss: () -> Unit,
     save: (Account) -> Unit
@@ -205,40 +227,46 @@ private fun AccountEditorDialog(
         save(initial.copy(name = name, type = type))
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = dismiss,
-        title = { Text("Edit account") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Account name") }
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Bank account", "Cash", "Credit card").forEach { option ->
-                        FilterChip(
-                            selected = type == option,
-                            onClick = { type = option },
-                            label = { Text(option) }
-                        )
-                    }
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WalletSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Edit account", fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Account name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Bank account", "Cash", "Credit card").forEach { option ->
+                    FilterChip(
+                        selected = type == option,
+                        onClick = { type = option },
+                        label = { Text(option) }
+                    )
                 }
             }
-        },
-        confirmButton = {
             Button(
                 onClick = saveAccount,
                 enabled = name.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(WalletGreen)
             ) {
-                Text("Save", color = WalletColors.ink)
+                Text("Save Account", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = dismiss) {
+            TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Cancel")
             }
         }
-    )
+    }
 }
