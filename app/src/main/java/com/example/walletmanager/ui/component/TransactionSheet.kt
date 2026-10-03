@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -149,13 +149,17 @@ fun TransactionSheet(
         TransactionKind.EXPENSE -> RedAccent
         TransactionKind.INCOME -> GreenAccent
     }
-    val compactInputStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+    val compactInputStyle = MaterialTheme.typography.bodySmall.copy(
+        fontSize = 13.sp,
+        lineHeight = 18.sp
+    )
 
     val selectedAccount = state.accounts.firstOrNull { it.id == accountId }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = dismiss,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         sheetState = sheetState,
         containerColor = ScreenBg,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
@@ -164,7 +168,6 @@ fun TransactionSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .imePadding()
                 .background(ScreenBg)
         ) {
             // Top Navigation Bar
@@ -289,7 +292,9 @@ fun TransactionSheet(
                 // Amount Row
                 HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { activePanel = "amount" },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -299,9 +304,7 @@ fun TransactionSheet(
                         modifier = Modifier.width(72.dp)
                     )
                     Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { activePanel = "amount" }
+                        Modifier.fillMaxWidth()
                     ) {
                         OutlinedTextField(
                             value = amountText,
@@ -309,7 +312,7 @@ fun TransactionSheet(
                             enabled = false,
                             textStyle = compactInputStyle,
                             placeholder = {
-                                Text("0.00", color = MutedText.copy(alpha = 0.4f), fontSize = 11.sp)
+                                Text("0.00", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
                             },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -318,12 +321,13 @@ fun TransactionSheet(
                                 unfocusedBorderColor = LineColor,
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
+                                disabledTextColor = Color.White,
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .height(48.dp)
                         )
                     }
                 }
@@ -362,7 +366,7 @@ fun TransactionSheet(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .height(48.dp)
                         )
                     }
                 }
@@ -390,7 +394,7 @@ fun TransactionSheet(
                             textStyle = compactInputStyle,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { accountMenu = true },
+                                .clickable { accountMenu = !accountMenu },
                             colors = OutlinedTextFieldDefaults.colors(
                                 disabledBorderColor = LineColor,
                                 disabledTextColor = Color.White,
@@ -399,10 +403,12 @@ fun TransactionSheet(
                         )
                         DropdownMenu(
                             expanded = accountMenu,
-                            onDismissRequest = { accountMenu = false }
+                            onDismissRequest = { accountMenu = false },
+                            modifier = Modifier.walletDropdownSurface()
                         ) {
                             state.accounts.forEach { acc ->
                                 DropdownMenuItem(
+                                    modifier = Modifier.walletDropdownItem(),
                                     text = {
                                         Text(
                                             "${acc.name} · ${formatMoney(acc.balanceMinor, true, state.baseCurrency)}",
@@ -442,7 +448,7 @@ fun TransactionSheet(
                                 textStyle = compactInputStyle,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { accountMenu = true },
+                                    .clickable { accountMenu = !accountMenu },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     disabledBorderColor = LineColor,
                                     disabledTextColor = Color.White,
@@ -451,12 +457,14 @@ fun TransactionSheet(
                             )
                             DropdownMenu(
                                 expanded = accountMenu,
-                                onDismissRequest = { accountMenu = false }
+                                onDismissRequest = { accountMenu = false },
+                                modifier = Modifier.walletDropdownSurface()
                             ) {
                                 state.accounts
                                     .filter { it.id != accountId }
                                     .forEach { acc ->
                                         DropdownMenuItem(
+                                            modifier = Modifier.walletDropdownItem(),
                                             text = { Text(acc.name) },
                                             onClick = {
                                                 destinationAccountId = acc.id
@@ -486,7 +494,7 @@ fun TransactionSheet(
                         onValueChange = { note = it },
                         textStyle = compactInputStyle,
                         placeholder = {
-                            Text("Write note...", color = MutedText.copy(alpha = 0.4f), fontSize = 11.sp)
+                            Text("Write note...", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
                         },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -499,7 +507,7 @@ fun TransactionSheet(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp)
+                            .height(48.dp)
                             .onFocusChanged { if (it.isFocused) activePanel = "note" }
                     )
                 }
@@ -507,7 +515,9 @@ fun TransactionSheet(
                 if (kind == TransactionKind.EXPENSE) {
                     HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { activePanel = "cashback" },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -517,17 +527,15 @@ fun TransactionSheet(
                             modifier = Modifier.width(72.dp)
                         )
                         Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { activePanel = "cashback" }
+                            Modifier.fillMaxWidth()
                         ) {
                             OutlinedTextField(
                                 value = cashbackText,
                                 onValueChange = {},
-                                readOnly = true,
+                                enabled = false,
                                 textStyle = compactInputStyle,
                                 placeholder = {
-                                    Text("Optional", color = MutedText.copy(alpha = 0.4f), fontSize = 11.sp)
+                                    Text("Optional", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
                                 },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -536,12 +544,13 @@ fun TransactionSheet(
                                     unfocusedBorderColor = LineColor,
                                     focusedContainerColor = Color.Transparent,
                                     unfocusedContainerColor = Color.Transparent,
+                                    disabledTextColor = Color.White,
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(40.dp)
+                                    .height(48.dp)
                             )
                         }
                     }
@@ -602,97 +611,97 @@ fun TransactionSheet(
                     if (activePanel == "category") {
                         // Split Columns (Left Parents, Right Subcategories)
                         Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        // Left Column: Parent Categories
-                        val parents = remember(state.categories, kind) {
-                            state.categories.filter {
-                                it.parentId == null &&
-                                    (kind == TransactionKind.INCOME && it.id == "income" ||
-                                        kind == TransactionKind.EXPENSE && it.id != "income")
-                            }
-                        }
-                        val activeParent = parents.firstOrNull { it.id == selectedParentId } ?: parents.firstOrNull()
-
-                        Column(
                             modifier = Modifier
-                                .width(148.dp)
-                                .fillMaxHeight()
-                                .background(CategoryPanelLeftBg)
-                                .verticalScroll(rememberScrollState())
+                                .fillMaxWidth()
+                                .weight(1f)
                         ) {
-                            parents.forEach { parent ->
-                                val isSelected = parent.id == activeParent?.id
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedParentId = parent.id
-                                            selectedCategoryName = parent.name
+                            // Left Column: Parent Categories
+                            val parents = remember(state.categories, kind) {
+                                state.categories.filter {
+                                    it.parentId == null &&
+                                            (kind == TransactionKind.INCOME && it.id == "income" ||
+                                                    kind == TransactionKind.EXPENSE && it.id != "income")
+                                }
+                            }
+                            val activeParent = parents.firstOrNull { it.id == selectedParentId } ?: parents.firstOrNull()
+
+                            Column(
+                                modifier = Modifier
+                                    .width(148.dp)
+                                    .fillMaxHeight()
+                                    .background(CategoryPanelLeftBg)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                parents.forEach { parent ->
+                                    val isSelected = parent.id == activeParent?.id
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedParentId = parent.id
+                                                selectedCategoryName = parent.name
+                                            }
+                                            .background(if (isSelected) DarkCardBg else Color.Transparent)
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(categoryEmoji(parent.name), fontSize = 14.sp)
+                                            Spacer(Modifier.width(10.dp))
+                                            Text(
+                                                text = parent.name,
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
                                         }
-                                        .background(if (isSelected) DarkCardBg else Color.Transparent)
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(categoryEmoji(parent.name), fontSize = 14.sp)
-                                        Spacer(Modifier.width(10.dp))
-                                        Text(
-                                            text = parent.name,
-                                            color = Color.White,
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowRight,
+                                            contentDescription = null,
+                                            tint = MutedText,
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = MutedText,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
                                 }
-                                HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
                             }
-                        }
 
-                        // Right Column: Subcategories of Active Parent
-                        val subcategories = remember(state.categories, activeParent) {
-                            if (activeParent == null) emptyList()
-                            else state.categories.filter { it.parentId == activeParent.id }
-                        }
+                            // Right Column: Subcategories of Active Parent
+                            val subcategories = remember(state.categories, activeParent) {
+                                if (activeParent == null) emptyList()
+                                else state.categories.filter { it.parentId == activeParent.id }
+                            }
 
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .background(CategoryPanelBg)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            if (subcategories.isEmpty()) {
-                                // If parent has no subcategory, allow selecting parent directly
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            if (activeParent != null) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .background(CategoryPanelBg)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                if (activeParent != null) {
+                                    val isParentOnlySelected = selectedCategoryName == activeParent.name
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
                                                 selectedCategoryName = activeParent.name
                                             }
-                                        }
-                                        .padding(horizontal = 20.dp, vertical = 16.dp)
-                                ) {
-                                    Text(
-                                        text = activeParent?.name ?: "",
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                            .background(if (isParentOnlySelected) DarkCardBg else Color.Transparent)
+                                            .padding(horizontal = 20.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            text = "${activeParent.name} (Main category)",
+                                            color = if (isParentOnlySelected) activeColor else Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isParentOnlySelected) FontWeight.Bold else FontWeight.SemiBold
+                                        )
+                                    }
+                                    HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
                                 }
-                            } else {
                                 subcategories.forEach { sub ->
-                                    val isSubSelected = selectedCategoryName.contains(sub.name)
+                                    val isSubSelected = selectedCategoryName == "${activeParent?.name} · ${sub.name}" || selectedCategoryName == sub.name
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -713,7 +722,6 @@ fun TransactionSheet(
                                 }
                             }
                         }
-                        }
                     } else {
                         when (activePanel) {
                             "date" -> DatePanel { selectedDate ->
@@ -721,11 +729,13 @@ fun TransactionSheet(
                             }
                             "amount" -> NumberPad(
                                 value = amountText,
-                                onValueChange = { amountText = it }
+                                onValueChange = { amountText = it },
+                                onDone = { activePanel = "category" }
                             )
                             "cashback" -> NumberPad(
                                 value = cashbackText,
-                                onValueChange = { cashbackText = it }
+                                onValueChange = { cashbackText = it },
+                                onDone = { activePanel = "category" }
                             )
                             "note" -> NotePanel(
                                 notes = state.notes,
@@ -782,7 +792,7 @@ fun TransactionSheet(
     }
 
     if (categoryManager && onAddCategory != null) {
-        CategoryManagerDialog(
+        CategoryManagerSheet(
             categories = state.categories,
             dismiss = { categoryManager = false },
             add = {
@@ -798,7 +808,7 @@ fun TransactionSheet(
     }
 
     if (addCategoryDialog && onAddCategory != null) {
-        AddCategoryDialog(
+        AddCategorySheet(
             categories = state.categories,
             dismiss = { addCategoryDialog = false },
             save = { name, parentId ->
@@ -808,13 +818,14 @@ fun TransactionSheet(
         )
     }
 
-    if (categoryToEdit != null && onEditCategory != null) {
-        AddCategoryDialog(
+    val currentCategoryToEdit = categoryToEdit
+    if (currentCategoryToEdit != null && onEditCategory != null) {
+        AddCategorySheet(
             categories = state.categories,
-            initial = categoryToEdit,
+            initial = currentCategoryToEdit,
             dismiss = { categoryToEdit = null },
             save = { name, parentId ->
-                onEditCategory(categoryToEdit!!.copy(name = name, parentId = parentId))
+                onEditCategory(currentCategoryToEdit.copy(name = name, parentId = parentId))
                 categoryToEdit = null
             }
         )
@@ -872,25 +883,28 @@ private fun DatePanel(onSelect: (String) -> Unit) {
 }
 
 @Composable
-private fun NumberPad(value: String, onValueChange: (String) -> Unit) {
-    val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫")
+private fun NumberPad(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onDone: () -> Unit
+) {
+    val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "Done")
     Column(
         Modifier
             .fillMaxWidth()
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(value.ifBlank { "0" }, color = Color.White, fontSize = 22.sp)
         keys.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { key ->
                     Button(
                         onClick = {
-                            onValueChange(
-                                if (key == "⌫") value.dropLast(1)
-                                else if (key == "." && value.contains('.')) value
-                                else value + key
-                            )
+                            if (key == "Done") {
+                                onDone()
+                            } else if (key != "." || !value.contains('.')) {
+                                onValueChange(value + key)
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = DarkCardBg)
@@ -953,8 +967,9 @@ private fun TabButton(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddCategoryDialog(
+private fun AddCategorySheet(
     categories: List<Category>,
     initial: Category? = null,
     dismiss: () -> Unit,
@@ -963,96 +978,133 @@ private fun AddCategoryDialog(
     var name by rememberSaveable { mutableStateOf(initial?.name.orEmpty()) }
     var parentId by rememberSaveable { mutableStateOf(initial?.parentId) }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = dismiss,
-        title = { Text(if (initial == null) "Add category" else "Edit category") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Category name") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text("Parent category", color = MutedText)
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(onClick = { parentId = null }) {
-                        Text(if (parentId == null) "Top level ✓" else "Top level")
-                    }
-                    categories
-                        .filter { it.parentId == null && it.id != initial?.id }
-                        .forEach { category ->
-                            TextButton(onClick = { parentId = category.id }) {
-                                Text(
-                                    if (parentId == category.id) {
-                                        "${category.name} ✓"
-                                    } else {
-                                        category.name
-                                    }
-                                )
-                            }
-                        }
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = CategoryPanelBg
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.5f)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                if (initial == null) "Add category" else "Edit category",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Category name") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = GreenAccent,
+                    unfocusedBorderColor = LineColor,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("Parent category (leave unselected for top-level)", color = MutedText, fontSize = 12.sp)
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(onClick = { parentId = null }) {
+                    Text(
+                        if (parentId == null) "Top level ✓" else "Top level",
+                        color = if (parentId == null) GreenAccent else Color.White
+                    )
                 }
+                categories
+                    .filter { it.parentId == null && it.id != initial?.id }
+                    .forEach { category ->
+                        TextButton(onClick = { parentId = category.id }) {
+                            Text(
+                                if (parentId == category.id) "${category.name} ✓" else category.name,
+                                color = if (parentId == category.id) GreenAccent else Color.White
+                            )
+                        }
+                    }
             }
-        },
-        confirmButton = {
+
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
                         save(name, parentId)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = WalletGreen)
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Save", color = Color.Black)
+                Text("Save Category", color = Color.Black, fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = dismiss) {
-                Text("Cancel")
+            TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel", color = MutedText)
             }
         }
-    )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryManagerDialog(
+private fun CategoryManagerSheet(
     categories: List<Category>,
     dismiss: () -> Unit,
     add: () -> Unit,
     edit: (Category) -> Unit,
     delete: (Category) -> Unit
 ) {
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = dismiss,
-        title = { Text("Manage categories") },
-        text = {
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = CategoryPanelBg
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.5f)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("Manage Categories", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Button(
+                onClick = add,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("+ Add category or subcategory", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Button(onClick = add) {
-                    Text("Add category or subcategory")
-                }
                 categories.forEach { category ->
                     Row(
                         Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (category.parentId == null) {
-                                category.name
-                            } else {
-                                "  ${category.name}"
-                            },
+                            text = if (category.parentId == null) category.name else "  └ ${category.name}",
                             modifier = Modifier.weight(1f),
-                            color = Color.White
+                            color = Color.White,
+                            fontWeight = if (category.parentId == null) FontWeight.Bold else FontWeight.Normal
                         )
                         TextButton(onClick = { edit(category) }) {
-                            Text("Edit")
+                            Text("Edit", color = BlueAccent)
                         }
                         TextButton(onClick = { delete(category) }) {
                             Text("Delete", color = RedAccent)
@@ -1061,11 +1113,10 @@ private fun CategoryManagerDialog(
                     HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = dismiss) {
-                Text("Done")
+
+            TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Done", color = Color.White)
             }
         }
-    )
+    }
 }

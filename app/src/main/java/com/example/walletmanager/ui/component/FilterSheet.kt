@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,6 +51,8 @@ import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
 import java.util.Locale
+import java.time.LocalDate
+import java.time.YearMonth
 
 private val HeaderBg = Color(0xFF2B3046)
 private val TopDonutBg = Color(0xFF1E202B)
@@ -80,13 +83,28 @@ fun FilterSheet(
             if (selectedFilterName == "All") emptySet<String>() else setOf(selectedFilterName)
         )
     }
+    var selectedMonthValue by rememberSaveable {
+        mutableStateOf(YearMonth.now().toString())
+    }
+    val selectedMonth = remember(selectedMonthValue) {
+        YearMonth.parse(selectedMonthValue)
+    }
+    val monthTransactions = remember(state.transactions, selectedMonthValue) {
+        state.transactions.filter { transaction ->
+            runCatching {
+                YearMonth.from(
+                    LocalDate.parse(transaction.date.substringBefore(" "))
+                )
+            }.getOrNull() == selectedMonth
+        }
+    }
 
     // Dynamic Calculations directly from state (Single Source of Truth)
-    val totalIncome = remember(state.transactions) {
-        state.transactions.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amountMinor }
+    val totalIncome = remember(monthTransactions) {
+        monthTransactions.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amountMinor }
     }
-    val totalExpense = remember(state.transactions) {
-        state.transactions.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amountMinor }
+    val totalExpense = remember(monthTransactions) {
+        monthTransactions.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amountMinor }
     }
     val netTotal = totalIncome - totalExpense
 
@@ -100,6 +118,8 @@ fun FilterSheet(
 
     ModalBottomSheet(
         onDismissRequest = dismiss,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = { WalletSheetBackButton(dismiss) },
         sheetState = sheetState,
         containerColor = FilterContentBg,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
@@ -123,26 +143,38 @@ fun FilterSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Previous Month",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        IconButton(
+                            onClick = {
+                                selectedMonthValue = selectedMonth.minusMonths(1).toString()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = "Previous Month",
+                                tint = Color.White
+                            )
+                        }
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "Sept 2026",
+                            text = selectedMonth.month.name
+                                .lowercase(Locale.getDefault())
+                                .replaceFirstChar { it.uppercase() } + " ${selectedMonth.year}",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp
                         )
                         Spacer(Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Next Month",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        IconButton(
+                            onClick = {
+                                selectedMonthValue = selectedMonth.plusMonths(1).toString()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "Next Month",
+                                tint = Color.White
+                            )
+                        }
                     }
 
                     IconButton(onClick = dismiss) {
@@ -312,13 +344,13 @@ fun FilterSheet(
                             )
 
                             accounts.forEach { acc ->
-                                val accIncome = remember(state.transactions, acc.id) {
-                                    state.transactions
+                                val accIncome = remember(monthTransactions, acc.id) {
+                                    monthTransactions
                                         .filter { it.accountId == acc.id && it.kind == TransactionKind.INCOME }
                                         .sumOf { it.amountMinor }
                                 }
-                                val accExpense = remember(state.transactions, acc.id) {
-                                    state.transactions
+                                val accExpense = remember(monthTransactions, acc.id) {
+                                    monthTransactions
                                         .filter { it.accountId == acc.id && it.kind == TransactionKind.EXPENSE }
                                         .sumOf { it.amountMinor }
                                 }
@@ -346,8 +378,8 @@ fun FilterSheet(
                     }
 
                     FilterTab.EXPENSES -> {
-                        val expenseTransactions = remember(state.transactions) {
-                            state.transactions.filter { it.kind == TransactionKind.EXPENSE }
+                        val expenseTransactions = remember(monthTransactions) {
+                            monthTransactions.filter { it.kind == TransactionKind.EXPENSE }
                         }
                         val categoryTotals = remember(expenseTransactions) {
                             expenseTransactions.groupBy { it.category }
@@ -392,8 +424,8 @@ fun FilterSheet(
                     }
 
                     FilterTab.INCOME -> {
-                        val incomeTransactions = remember(state.transactions) {
-                            state.transactions.filter { it.kind == TransactionKind.INCOME }
+                        val incomeTransactions = remember(monthTransactions) {
+                            monthTransactions.filter { it.kind == TransactionKind.INCOME }
                         }
                         val categoryTotals = remember(incomeTransactions) {
                             incomeTransactions.groupBy { it.category }

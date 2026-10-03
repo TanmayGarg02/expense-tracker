@@ -7,13 +7,13 @@ import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
     primary = WalletGreen,
-    secondary = WalletGreen,
-    tertiary = WalletGreen,
+    secondary = Color(0xFFD9B27C),
+    tertiary = WalletRed,
     background = WalletBackground,
     surface = WalletSurface,
     onBackground = WalletText,
     onSurface = WalletText,
-    onPrimary = Color(0xFF10201A)
+    onPrimary = Color(0xFF1C1815)
 )
 
 @Composable
@@ -26,3 +26,4 @@ fun WalletManagerTheme(
         content = content
     )
 }
+

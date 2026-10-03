@@ -40,6 +40,18 @@ data class IpoEntity(
     val allotmentDateMillis: Long
 )
 
+@Entity(tableName = "fixed_deposits")
+data class FixedDepositEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val principalMinor: Long,
+    val interestRateBps: Int,
+    val maturityDate: String,
+    val maturityDateMillis: Long,
+    val maturityAmountMinor: Long,
+    val accountId: String = ""
+)
+
 @Entity(tableName = "notes")
 data class NoteEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val text: String)
 
