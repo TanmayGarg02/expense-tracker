@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.walletmanager.data.model.Account
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.Currency
+import com.example.walletmanager.data.model.FixedDeposit
 import com.example.walletmanager.data.model.Holding
 import com.example.walletmanager.data.model.InvestmentType
 import com.example.walletmanager.data.model.PendingIpo
@@ -14,8 +15,11 @@ import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.data.repository.WalletRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -23,6 +27,8 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
 
     private val mutableState = MutableStateFlow(WalletUiState())
     val state: StateFlow<WalletUiState> = mutableState.asStateFlow()
+    private val mutableEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val events: SharedFlow<String> = mutableEvents.asSharedFlow()
 
     init {
         viewModelScope.launch {
@@ -69,48 +75,61 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         setTransactionFilters(null, null, null)
     }
 
-    fun setCurrency(currency: Currency) = viewModelScope.launch {
+    fun notify(message: String) {
+        mutableEvents.tryEmit(message)
+    }
+
+    private fun launchAction(action: suspend () -> Unit) = viewModelScope.launch {
+        try {
+            action()
+        } catch (error: Exception) {
+            notify(error.message ?: "Something went wrong")
+        }
+    }
+
+    fun setCurrency(currency: Currency) = launchAction {
         repository.setCurrency(currency)
     }
 
-    fun setProfile(name: String, imageUri: String) = viewModelScope.launch {
+    fun setProfile(name: String, imageUri: String) = launchAction {
         repository.setProfile(name, imageUri)
     }
 
-    fun wipeData() = viewModelScope.launch {
+    fun wipeData() = launchAction {
         repository.wipeData()
     }
 
-    fun addAccount(name: String, type: String) = viewModelScope.launch {
+    fun addAccount(name: String, type: String) = launchAction {
         repository.addAccount(name, type)
     }
 
-    fun editAccount(account: Account) = viewModelScope.launch {
+    fun editAccount(account: Account) = launchAction {
         repository.editAccount(account)
     }
 
-    fun deleteAccount(account: Account) = viewModelScope.launch {
+    fun deleteAccount(account: Account) = launchAction {
         repository.deleteAccount(account)
     }
 
-    fun addNote(note: String) = viewModelScope.launch {
+    fun addNote(note: String) = launchAction {
         repository.addNote(note)
     }
 
-    fun addCategory(name: String, parentId: String?) = viewModelScope.launch {
+    fun addCategory(name: String, parentId: String?) = launchAction {
         repository.addCategory(name, parentId)
     }
 
-    fun editCategory(category: Category) = viewModelScope.launch {
+    fun editCategory(category: Category) = launchAction {
         repository.editCategory(category)
     }
 
-    fun deleteCategory(category: Category) = viewModelScope.launch {
+    fun deleteCategory(category: Category) = launchAction {
         repository.deleteCategory(category)
     }
 
-    fun importCsv(csv: String) = viewModelScope.launch {
+    fun importCsv(csv: String) = launchAction {
         repository.importCsv(csv)
+        notify("CSV imported")
     }
 
     fun addTransaction(
@@ -121,7 +140,7 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         accountId: String,
         note: String = "",
         cashbackMinor: Long = 0
-    ) = viewModelScope.launch {
+    ) = launchAction {
         repository.addTransaction(title, amountMinor, kind, category, accountId, note, cashbackMinor)
     }
 
@@ -131,15 +150,15 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         sourceAccountId: String,
         destinationAccountId: String,
         note: String
-    ) = viewModelScope.launch {
+    ) = launchAction {
         repository.transfer(title, amountMinor, sourceAccountId, destinationAccountId, note)
     }
 
-    fun editTransaction(transaction: Transaction) = viewModelScope.launch {
+    fun editTransaction(transaction: Transaction) = launchAction {
         repository.editTransaction(transaction)
     }
 
-    fun deleteTransaction(transaction: Transaction) = viewModelScope.launch {
+    fun deleteTransaction(transaction: Transaction) = launchAction {
         repository.deleteTransaction(transaction)
     }
 
@@ -152,7 +171,7 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         category: String = "Bills",
         dueDay: Int = 5,
         investmentType: InvestmentType = InvestmentType.MUTUAL_FUND
-    ) = viewModelScope.launch {
+    ) = launchAction {
         repository.addRecurringPayment(
             name,
             amountMinor,
@@ -165,37 +184,51 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         )
     }
 
-    fun editRecurringPayment(payment: RecurringPayment) = viewModelScope.launch {
+    fun editRecurringPayment(payment: RecurringPayment) = launchAction {
         repository.editRecurringPayment(payment)
     }
 
-    fun toggleRecurringPayment(payment: RecurringPayment) = viewModelScope.launch {
+    fun toggleRecurringPayment(payment: RecurringPayment) = launchAction {
         repository.toggleRecurringPayment(payment)
+    }
+
+    fun deleteRecurringPayment(id: String) = launchAction {
+        repository.deleteRecurringPayment(id)
     }
 
     fun addHolding(
         name: String,
         type: InvestmentType,
-        units: String,
-        valueMinor: Long,
-        costMinor: Long
-    ) = viewModelScope.launch {
-        repository.addHolding(name, type, units, valueMinor, costMinor)
+        investedMinor: Long
+    ) = launchAction {
+        repository.addHolding(name, type, "", investedMinor, investedMinor)
     }
 
-    fun addIpo(ipo: PendingIpo) = viewModelScope.launch {
+    fun addIpo(ipo: PendingIpo) = launchAction {
         repository.addIpo(ipo)
     }
 
-    fun confirmIpo(id: String, type: InvestmentType) = viewModelScope.launch {
+    fun confirmIpo(id: String, type: InvestmentType) = launchAction {
         repository.confirmIpo(id, type)
     }
 
-    fun rejectIpo(id: String) = viewModelScope.launch {
+    fun rejectIpo(id: String) = launchAction {
         repository.rejectIpo(id)
     }
 
-    fun editHolding(holding: Holding) = viewModelScope.launch {
+    fun addFixedDeposit(deposit: FixedDeposit) = launchAction {
+        repository.addFixedDeposit(deposit)
+    }
+
+    fun editFixedDeposit(deposit: FixedDeposit) = launchAction {
+        repository.editFixedDeposit(deposit)
+    }
+
+    fun deleteFixedDeposit(deposit: FixedDeposit) = launchAction {
+        repository.deleteFixedDeposit(deposit)
+    }
+
+    fun editHolding(holding: Holding) = launchAction {
         repository.editHolding(holding)
     }
 }

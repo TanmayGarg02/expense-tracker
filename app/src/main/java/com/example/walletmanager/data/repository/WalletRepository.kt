@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.example.walletmanager.data.local.AccountEntity
 import com.example.walletmanager.data.local.CategoryEntity
 import com.example.walletmanager.data.local.HoldingEntity
+import com.example.walletmanager.data.local.FixedDepositEntity
 import com.example.walletmanager.data.local.IpoEntity
 import com.example.walletmanager.data.local.NoteEntity
 import com.example.walletmanager.data.local.RecurringPaymentEntity
@@ -15,6 +16,8 @@ import com.example.walletmanager.data.model.AccountAccent
 import com.example.walletmanager.data.model.Currency
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.Holding
+import com.example.walletmanager.data.model.FixedDeposit
+import com.example.walletmanager.data.model.calculateFixedDepositMaturity
 import com.example.walletmanager.data.model.InvestmentType
 import com.example.walletmanager.data.model.PendingIpo
 import com.example.walletmanager.data.model.RecurringPayment
@@ -26,6 +29,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.temporal.IsoFields
+
+private data class StoredWalletData(
+    val stored: Triple<List<HoldingEntity>, List<NoteEntity>, SettingsEntity?>,
+    val categories: List<CategoryEntity>,
+    val ipos: List<IpoEntity>,
+    val fixedDeposits: List<FixedDepositEntity>
+)
 
 class WalletRepository(private val database: WalletDatabase) {
     private val dao = database.walletDao()
@@ -46,29 +56,43 @@ class WalletRepository(private val database: WalletDatabase) {
             ) { holdings, notes, settings ->
                 Triple(holdings, notes, settings)
             },
-            dao.categories(),
-            dao.ipos()
-        ) { stored, categories, ipos ->
-            Triple(stored, categories, ipos)
+            combine(
+                dao.categories(),
+                dao.ipos(),
+                dao.fixedDeposits()
+            ) { categories, ipos, fixedDeposits ->
+                Triple(categories, ipos, fixedDeposits)
+            }
+        ) { stored, related ->
+            StoredWalletData(
+                stored,
+                related.first,
+                related.second,
+                related.third
+            )
         }
     ) { first, second ->
         val accounts = first.first
         val transactions = first.second
         val plans = first.third
-        val holdings = second.first.first
-        val notes = second.first.second
-        val settings = second.first.third
-        val categories = second.second
-        val ipos = second.third
+        val holdings = second.stored.first
+        val notes = second.stored.second
+        val settings = second.stored.third
+        val categories = second.categories
+        val ipos = second.ipos
+        val fixedDeposits = second.fixedDeposits
 
         WalletUiState(
-            accounts = accounts.map {
+            accounts = accounts.map { acc ->
+                val linkedFdTotal = fixedDeposits
+                    .filter { fd -> fd.accountId == acc.id }
+                    .sumOf { fd -> fd.principalMinor }
                 Account(
-                    id = it.id,
-                    name = it.name,
-                    type = it.type,
-                    balanceMinor = it.balanceMinor,
-                    accent = runCatching { AccountAccent.valueOf(it.accent) }.getOrDefault(AccountAccent.Green)
+                    id = acc.id,
+                    name = acc.name,
+                    type = acc.type,
+                    balanceMinor = acc.balanceMinor + linkedFdTotal,
+                    accent = runCatching { AccountAccent.valueOf(acc.accent) }.getOrDefault(AccountAccent.Green)
                 )
             },
             transactions = transactions.map {
@@ -121,6 +145,18 @@ class WalletRepository(private val database: WalletDatabase) {
                     amountMinor = it.amountMinor,
                     allotmentDate = it.allotmentDate,
                     allotmentDateMillis = it.allotmentDateMillis
+                )
+            },
+            fixedDeposits = fixedDeposits.map {
+                FixedDeposit(
+                    id = it.id,
+                    name = it.name,
+                    principalMinor = it.principalMinor,
+                    interestRateBps = it.interestRateBps,
+                    maturityDate = it.maturityDate,
+                    maturityDateMillis = it.maturityDateMillis,
+                    maturityAmountMinor = it.maturityAmountMinor,
+                    accountId = it.accountId
                 )
             },
             notes = notes.map { it.text },
@@ -547,6 +583,11 @@ class WalletRepository(private val database: WalletDatabase) {
 
     suspend fun toggleRecurringPayment(p: RecurringPayment) = editRecurringPayment(p.copy(active = !p.active))
 
+    suspend fun deleteRecurringPayment(id: String) {
+        dao.deleteRecurringPaymentHolding(id)
+        dao.deleteRecurringPayment(id)
+    }
+
     suspend fun addHolding(
         name: String,
         type: InvestmentType,
@@ -604,6 +645,29 @@ class WalletRepository(private val database: WalletDatabase) {
         dao.deleteIpo(id)
     }
 
+    suspend fun addFixedDeposit(deposit: FixedDeposit) {
+        dao.insertFixedDeposit(
+            FixedDepositEntity(
+                id = deposit.id,
+                name = deposit.name,
+                principalMinor = deposit.principalMinor,
+                interestRateBps = deposit.interestRateBps,
+                maturityDate = deposit.maturityDate,
+                maturityDateMillis = deposit.maturityDateMillis,
+                maturityAmountMinor = deposit.maturityAmountMinor,
+                accountId = deposit.accountId
+            )
+        )
+    }
+
+    suspend fun editFixedDeposit(deposit: FixedDeposit) {
+        addFixedDeposit(deposit)
+    }
+
+    suspend fun deleteFixedDeposit(deposit: FixedDeposit) {
+        dao.deleteFixedDeposit(deposit.id)
+    }
+
     suspend fun wipeData() {
         database.withTransaction {
             dao.clearAccounts()
@@ -611,6 +675,7 @@ class WalletRepository(private val database: WalletDatabase) {
             dao.clearRecurringPayments()
             dao.clearHoldings()
             dao.clearIpos()
+            dao.clearFixedDeposits()
             dao.clearNotes()
             dao.clearCategories()
             dao.clearSettings()

@@ -14,11 +14,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RecurringPaymentEntity::class,
         HoldingEntity::class,
         IpoEntity::class,
+        FixedDepositEntity::class,
         NoteEntity::class,
         SettingsEntity::class,
         CategoryEntity::class
     ],
-    version = 8,
+    version = 10,
     exportSchema = false
 )
 abstract class WalletDatabase : RoomDatabase() {
@@ -40,8 +41,10 @@ abstract class WalletDatabase : RoomDatabase() {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
-                MIGRATION_7_8
-            ).build().also {
+                MIGRATION_7_8,
+                MIGRATION_8_9,
+                MIGRATION_9_10
+            ).fallbackToDestructiveMigration().build().also {
                 instance = it
             }
         }
@@ -104,6 +107,22 @@ abstract class WalletDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL(
                     "ALTER TABLE recurring_payments ADD COLUMN investmentType TEXT NOT NULL DEFAULT 'MUTUAL_FUND'"
+                )
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS fixed_deposits (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, principalMinor INTEGER NOT NULL, interestRateBps INTEGER NOT NULL, maturityDate TEXT NOT NULL, maturityDateMillis INTEGER NOT NULL, maturityAmountMinor INTEGER NOT NULL)"
+                )
+            }
+        }
+
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE fixed_deposits ADD COLUMN accountId TEXT NOT NULL DEFAULT ''"
                 )
             }
         }

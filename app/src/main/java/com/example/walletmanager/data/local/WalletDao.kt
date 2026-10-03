@@ -13,6 +13,7 @@ interface WalletDao {
     @Query("SELECT * FROM recurring_payments ORDER BY id") fun recurringPayments(): Flow<List<RecurringPaymentEntity>>
     @Query("SELECT * FROM holdings ORDER BY id") fun holdings(): Flow<List<HoldingEntity>>
     @Query("SELECT * FROM ipos ORDER BY allotmentDateMillis") fun ipos(): Flow<List<IpoEntity>>
+    @Query("SELECT * FROM fixed_deposits ORDER BY maturityDateMillis") fun fixedDeposits(): Flow<List<FixedDepositEntity>>
     @Query("SELECT * FROM notes ORDER BY id DESC") fun notes(): Flow<List<NoteEntity>>
     @Query("SELECT * FROM categories ORDER BY parentId, name") fun categories(): Flow<List<CategoryEntity>>
     @Query("SELECT * FROM categories WHERE id = :id") suspend fun category(id: String): CategoryEntity?
@@ -35,9 +36,12 @@ interface WalletDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertRecurringPayment(item: RecurringPaymentEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertHolding(item: HoldingEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertIpo(item: IpoEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertFixedDeposit(item: FixedDepositEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertCategory(item: CategoryEntity)
     @Query("DELETE FROM accounts WHERE id = :id") suspend fun deleteAccount(id: String)
     @Query("DELETE FROM transactions WHERE id = :id") suspend fun deleteTransaction(id: String)
+    @Query("DELETE FROM recurring_payments WHERE id = :id") suspend fun deleteRecurringPayment(id: String)
+    @Query("DELETE FROM holdings WHERE recurringPaymentId = :paymentId") suspend fun deleteRecurringPaymentHolding(paymentId: String)
     @Query("DELETE FROM transactions WHERE accountId = :accountId") suspend fun deleteAccountTransactions(accountId: String)
     @Query("DELETE FROM categories WHERE id = :id") suspend fun deleteCategory(id: String)
     @Query("DELETE FROM categories WHERE parentId = :parentId") suspend fun deleteSubcategories(parentId: String)
@@ -49,7 +53,9 @@ interface WalletDao {
     @Query("DELETE FROM notes") suspend fun clearNotes()
     @Query("DELETE FROM categories") suspend fun clearCategories()
     @Query("DELETE FROM ipos") suspend fun clearIpos()
+    @Query("DELETE FROM fixed_deposits") suspend fun clearFixedDeposits()
     @Query("DELETE FROM settings") suspend fun clearSettings()
     @Query("DELETE FROM ipos WHERE id = :id") suspend fun deleteIpo(id: String)
     @Query("SELECT * FROM ipos WHERE id = :id") suspend fun ipo(id: String): IpoEntity?
+    @Query("DELETE FROM fixed_deposits WHERE id = :id") suspend fun deleteFixedDeposit(id: String)
 }

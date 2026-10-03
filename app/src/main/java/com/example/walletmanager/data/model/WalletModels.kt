@@ -30,7 +30,10 @@ enum class InvestmentType {
     EQUITY,
     MUTUAL_FUND,
     INDEX_FUND,
-    SIP
+    SIP,
+    INSURANCE,
+    GOLD,
+    OTHER
 }
 
 data class Account(
@@ -97,6 +100,33 @@ data class PendingIpo(
     val allotmentDateMillis: Long
 )
 
+data class FixedDeposit(
+    val id: String,
+    val name: String,
+    val principalMinor: Long,
+    val interestRateBps: Int,
+    val maturityDate: String,
+    val maturityDateMillis: Long,
+    val maturityAmountMinor: Long,
+    val accountId: String = ""
+)
+
+fun calculateFixedDepositMaturity(
+    principalMinor: Long,
+    interestRateBps: Int,
+    maturityDate: String,
+    today: String = java.time.LocalDate.now().toString()
+): Long {
+    val days = runCatching {
+        java.time.temporal.ChronoUnit.DAYS.between(
+            java.time.LocalDate.parse(today),
+            java.time.LocalDate.parse(maturityDate)
+        ).coerceAtLeast(0)
+    }.getOrDefault(0)
+    val interest = principalMinor * interestRateBps * days / (10000L * 365L)
+    return principalMinor + interest
+}
+
 data class WalletUiState(
     val route: String = "home",
     val baseCurrency: Currency = Currency.INR,
@@ -106,6 +136,7 @@ data class WalletUiState(
     val recurringPayments: List<RecurringPayment> = emptyList(),
     val holdings: List<Holding> = emptyList(),
     val pendingIpos: List<PendingIpo> = emptyList(),
+    val fixedDeposits: List<FixedDeposit> = emptyList(),
     val notes: List<String> = emptyList(),
     val categories: List<Category> = emptyList(),
     val profileName: String = "Alex",
