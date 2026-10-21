@@ -25,7 +25,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -39,12 +38,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -52,6 +51,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
 import com.example.walletmanager.data.model.Holding
 import com.example.walletmanager.data.model.InvestmentType
 import com.example.walletmanager.data.model.PendingIpo
@@ -60,16 +60,22 @@ import com.example.walletmanager.ui.component.ScreenHeader
 import com.example.walletmanager.ui.component.SectionTitle
 import com.example.walletmanager.ui.component.SummaryCard
 import com.example.walletmanager.ui.component.WalletColors
+import com.example.walletmanager.ui.component.WalletIcon
+import com.example.walletmanager.ui.component.WalletActionButton
+import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.walletDropdownItem
 import com.example.walletmanager.ui.component.walletDropdownSurface
 import com.example.walletmanager.ui.component.rememberDebouncedClick
 import com.example.walletmanager.ui.theme.WalletBackground
-import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.theme.WalletSurface
 import java.time.LocalDate
 import java.time.ZoneId
+
+private val InvestmentPositive = Color(0xFF91A694)
+private val InvestmentNegative = Color(0xFFC27D79)
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -84,11 +90,11 @@ fun InvestmentsScreen(
     var addSheet by rememberSaveable { mutableStateOf(false) }
     var addIpoSheet by rememberSaveable { mutableStateOf(false) }
     var expandedTypes by rememberSaveable {
-        mutableStateOf(InvestmentType.entries.map { it.name }.toSet())
+        mutableStateOf(InvestmentType.categories.map { it.name }.toSet())
     }
     val holdingsByType = remember(state.holdings) {
-        InvestmentType.entries.associateWith { type ->
-            state.holdings.filter { it.type == type }
+        InvestmentType.categories.associateWith { type ->
+            state.holdings.filter { it.type.displayCategory() == type }
         }
     }
     val totalInvested = remember(state.holdings) {
@@ -100,7 +106,7 @@ fun InvestmentsScreen(
             .fillMaxSize()
             .background(WalletBackground),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 70.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             ScreenHeader("Investments", "Stocks, equities, mutual funds and SIPs")
@@ -117,7 +123,7 @@ fun InvestmentsScreen(
 
         if (state.pendingIpos.isNotEmpty()) {
             item {
-                SectionTitle("⏳ Pending IPOs")
+                SectionTitle("Pending IPOs")
             }
             items(state.pendingIpos, key = { it.id }) { ipo ->
                 Card(
@@ -130,29 +136,26 @@ fun InvestmentsScreen(
                             Text("Allotment ${ipo.allotmentDate}", color = WalletColors.muted)
                             Text(formatMoney(ipo.amountMinor, state.balancesVisible, state.baseCurrency), fontWeight = FontWeight.Bold)
                         }
-                        TextButton(onClick = { rejectIpo(ipo.id) }) {
-                            Text("Delete", color = WalletColors.red)
-                        }
+                        WalletActionButton(
+                            "Delete",
+                            { rejectIpo(ipo.id) },
+                            destructive = true,
+                            destructiveColor = InvestmentNegative
+                        )
                     }
                 }
             }
         }
 
-        InvestmentType.entries.forEach { type ->
+        InvestmentType.categories.forEach { type ->
             val holdings = holdingsByType[type].orEmpty()
             if (holdings.isNotEmpty()) {
                 item(key = "category-${type.name}") {
                     val expanded = type.name in expandedTypes
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateContentSize(animationSpec = tween(180))
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(WalletSurface)
                                 .clickable {
                                     expandedTypes = if (expanded) {
                                         expandedTypes - type.name
@@ -160,42 +163,39 @@ fun InvestmentsScreen(
                                         expandedTypes + type.name
                                     }
                                 }
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                .padding(horizontal = 2.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            WalletIcon(investmentIcon(type), color = WalletBeige, size = 19.dp)
                             Text(
-                                "${investmentIcon(type)} ${formatInvestmentTypeName(type)}",
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(end = 4.dp),
-                                fontWeight = FontWeight.Bold,
+                                formatInvestmentTypeName(type).uppercase(),
+                                modifier = Modifier.weight(1f).padding(start = 10.dp, end = 4.dp),
+                                style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.1.sp),
+                                color = WalletColors.cream,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 formatMoney(holdings.sumOf { it.costMinor }, state.balancesVisible, state.baseCurrency),
-                                color = WalletGreen,
-                                fontWeight = FontWeight.Bold,
+                                color = InvestmentPositive,
+                                fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             Box(
                                 modifier = Modifier.size(width = 38.dp, height = 32.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    if (expanded) "▴" else "▾",
-                                    color = WalletColors.muted,
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                WalletIcon(if (expanded) "chevron_up" else "chevron_down", color = WalletColors.muted, size = 18.dp)
                             }
                         }
                         AnimatedVisibility(
                             visible = expanded,
-                            enter = expandVertically(animationSpec = tween(180)) +
-                                fadeIn(animationSpec = tween(140)),
-                            exit = shrinkVertically(animationSpec = tween(180)) +
-                                fadeOut(animationSpec = tween(140))
+                            enter = expandVertically(
+                                animationSpec = tween(140, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(100, easing = FastOutSlowInEasing)),
+                            exit = shrinkVertically(
+                                animationSpec = tween(110, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(80, easing = FastOutSlowInEasing))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -214,7 +214,7 @@ fun InvestmentsScreen(
                                         Column(Modifier.padding(16.dp)) {
                                             Text(holding.name, fontWeight = FontWeight.Bold)
                                             if (holding.recurringPaymentId != null) {
-                                                Text("Ongoing SIP", color = WalletGreen)
+                                                Text("Ongoing SIP", color = InvestmentPositive)
                                             }
                                             Text(
                                                 "Invested: ${formatMoney(holding.costMinor, state.balancesVisible, state.baseCurrency)}",
@@ -234,7 +234,7 @@ fun InvestmentsScreen(
             Button(
                 onClick = { addSheet = true },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(InvestmentPositive)
             ) {
                 Text("+ Add investment", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
@@ -245,7 +245,7 @@ fun InvestmentsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text("🏷️ Add IPO")
+                Text("+ Add IPO")
             }
         }
     }
@@ -318,7 +318,7 @@ private fun IpoSheet(
         }
     }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -354,7 +354,7 @@ private fun IpoSheet(
             Button(
                 onClick = saveIpo,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(InvestmentPositive)
             ) {
                 Text("Save IPO", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
@@ -369,14 +369,10 @@ private fun IpoSheet(
 }
 
 fun investmentIcon(type: InvestmentType): String = when (type) {
-    InvestmentType.STOCK -> "📈"
-    InvestmentType.EQUITY -> "🏛️"
-    InvestmentType.MUTUAL_FUND -> "💼"
-    InvestmentType.INDEX_FUND -> "🧭"
-    InvestmentType.SIP -> "🪙"
-    InvestmentType.INSURANCE -> "🛡️"
-    InvestmentType.GOLD -> "🥇"
-    InvestmentType.OTHER -> "🧾"
+    InvestmentType.STOCK, InvestmentType.EQUITY, InvestmentType.INDEX_FUND, InvestmentType.SIP -> "chart"
+    InvestmentType.MUTUAL_FUND, InvestmentType.OTHER -> "category"
+    InvestmentType.INSURANCE -> "shield"
+    InvestmentType.GOLD -> "coin"
 }
 
 fun formatInvestmentTypeName(type: InvestmentType): String = when (type) {
@@ -399,7 +395,9 @@ private fun InvestmentSheet(
 ) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var cost by remember { mutableStateOf(initial?.costMinor?.div(100.0)?.toString().orEmpty()) }
-    var type by remember { mutableStateOf(initial?.type ?: InvestmentType.MUTUAL_FUND) }
+    var type by remember {
+        mutableStateOf(initial?.type?.displayCategory() ?: InvestmentType.MUTUAL_FUND)
+    }
     var expandedDropdown by remember { mutableStateOf(false) }
 
     val saveInvestment = rememberDebouncedClick {
@@ -411,7 +409,7 @@ private fun InvestmentSheet(
         dismiss()
     }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -442,9 +440,10 @@ private fun InvestmentSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
-                    value = "${investmentIcon(type)} ${formatInvestmentTypeName(type)}",
+                    value = formatInvestmentTypeName(type),
                     onValueChange = {},
                     readOnly = true,
+                    leadingIcon = { WalletIcon(investmentIcon(type), color = WalletColors.muted, size = 18.dp) },
                     label = { Text("Investment category") },
                     trailingIcon = {
                         Box(
@@ -452,11 +451,7 @@ private fun InvestmentSheet(
                                 .size(width = 48.dp, height = 48.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "⌄",
-                                color = WalletGreen,
-                                fontSize = 24.sp
-                            )
+                            WalletIcon("chevron_down", color = InvestmentPositive, size = 18.dp)
                         }
                     },
                     colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
@@ -469,10 +464,15 @@ private fun InvestmentSheet(
                     onDismissRequest = { expandedDropdown = false },
                     modifier = Modifier.walletDropdownSurface()
                 ) {
-                    InvestmentType.entries.forEach { option ->
+                    InvestmentType.categories.forEach { option ->
                         DropdownMenuItem(
                             modifier = Modifier.walletDropdownItem(),
-                            text = { Text("${investmentIcon(option)} ${formatInvestmentTypeName(option)}") },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    WalletIcon(investmentIcon(option), color = WalletColors.cream, size = 18.dp)
+                                    Text(formatInvestmentTypeName(option), modifier = Modifier.padding(start = 10.dp))
+                                }
+                            },
                             onClick = {
                                 type = option
                                 expandedDropdown = false
@@ -493,7 +493,7 @@ private fun InvestmentSheet(
                 onClick = saveInvestment,
                 enabled = name.isNotBlank() && cost.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(InvestmentPositive)
             ) {
                 Text("Save Investment", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }

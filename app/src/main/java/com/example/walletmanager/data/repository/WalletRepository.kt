@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.temporal.IsoFields
 
 private data class StoredWalletData(
@@ -231,6 +232,127 @@ class WalletRepository(private val database: WalletDatabase) {
                 CategoryEntity("other", "Other")
             )
         )
+    }
+
+    suspend fun addSampleData(): Boolean {
+        val sampleAccountId = "demo-account-main"
+        if (dao.account(sampleAccountId) != null) return false
+
+        val today = LocalDate.now()
+        val now = System.currentTimeMillis()
+        val mainId = sampleAccountId
+        val cashId = "demo-account-cash"
+        val savingsId = "demo-account-savings"
+        fun demoTransaction(
+            id: String,
+            title: String,
+            category: String,
+            amountRupees: Long,
+            kind: TransactionKind,
+            accountId: String,
+            daysAgo: Long,
+            note: String = "",
+            cashbackRupees: Long = 0
+        ): TransactionEntity {
+            val date = today.minusDays(daysAgo)
+            return TransactionEntity(
+                id = "demo-tx-$id",
+                title = title,
+                category = category,
+                amountMinor = amountRupees * 100,
+                kind = kind.name,
+                accountId = accountId,
+                date = date.toString(),
+                weekOfMonth = (date.dayOfMonth - 1) / 7 + 1,
+                note = note,
+                cashbackMinor = cashbackRupees * 100,
+                createdAt = date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            )
+        }
+
+        val demoTransactions = listOf(
+            demoTransaction("salary", "Monthly salary", "Salary", 125000, TransactionKind.INCOME, mainId, 15, "Sample income"),
+            demoTransaction("rent", "Apartment rent", "Bills", 32000, TransactionKind.EXPENSE, mainId, 4, "Sample recurring payment"),
+            demoTransaction("groceries", "Weekly groceries", "Groceries", 7400, TransactionKind.EXPENSE, mainId, 2),
+            demoTransaction("phone", "Phone and internet", "Bills", 1200, TransactionKind.EXPENSE, mainId, 10),
+            demoTransaction("dinner", "Dinner out", "Restaurants", 2500, TransactionKind.EXPENSE, mainId, 1, cashbackRupees = 100),
+            demoTransaction("dinner-cashback", "Cashback · Dinner out", "Cashback", 100, TransactionKind.INCOME, mainId, 1, "Sample cashback"),
+            demoTransaction("transfer-out-cash", "Cash withdrawal", "Transfer", 5000, TransactionKind.EXPENSE, mainId, 5, "Sample transfer to Cash"),
+            demoTransaction("transfer-in-cash", "Cash withdrawal", "Transfer", 5000, TransactionKind.INCOME, cashId, 5, "Sample transfer from Main account"),
+            demoTransaction("coffee", "Coffee shop", "Cafe & Coffee", 450, TransactionKind.EXPENSE, cashId, 0),
+            demoTransaction("taxi", "Taxi ride", "Taxi / Cab", 900, TransactionKind.EXPENSE, cashId, 6),
+            demoTransaction("transfer-out-savings", "Move to savings", "Transfer", 20000, TransactionKind.EXPENSE, mainId, 20),
+            demoTransaction("transfer-in-savings", "Move to savings", "Transfer", 20000, TransactionKind.INCOME, savingsId, 20),
+            demoTransaction("interest", "Savings interest", "Income", 325, TransactionKind.INCOME, savingsId, 9)
+        )
+        val netChanges = demoTransactions.groupBy { it.accountId }.mapValues { (_, entries) ->
+            entries.sumOf {
+                if (it.kind == TransactionKind.INCOME.name) it.amountMinor else -it.amountMinor
+            }
+        }
+        val targetBalances = mapOf(mainId to 12_500_000L, cashId to 965_000L, savingsId to 12_032_500L)
+        val sampleAccounts = listOf(
+            AccountEntity(mainId, "Main account", "Bank", targetBalances.getValue(mainId) - (netChanges[mainId] ?: 0), AccountAccent.Green.name),
+            AccountEntity(cashId, "Cash wallet", "Cash", targetBalances.getValue(cashId) - (netChanges[cashId] ?: 0), AccountAccent.Amber.name),
+            AccountEntity(savingsId, "Savings", "Savings", targetBalances.getValue(savingsId) - (netChanges[savingsId] ?: 0), AccountAccent.Purple.name)
+        )
+        val period = "${today.year}-${today.monthValue}"
+        val weekPeriod = "${today.year}-W${today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)}"
+        val maturityDate = today.plusYears(1)
+        val maturityDateMillis = maturityDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val maturityAmount = calculateFixedDepositMaturity(5_000_000L, 650, maturityDate.toString(), today.toString())
+        val ipoDate = today.plusDays(14)
+        val ipoDateMillis = ipoDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+        database.withTransaction {
+            dao.insertAccounts(sampleAccounts)
+            dao.insertTransactions(demoTransactions)
+            netChanges.forEach { (accountId, amount) -> dao.adjustBalance(accountId, amount) }
+            dao.insertRecurringPayments(
+                listOf(
+                    RecurringPaymentEntity(
+                        id = "demo-plan-rent", name = "Apartment rent", amountMinor = 3_200_000L,
+                        frequency = "Monthly", due = "Day 1", accountId = mainId, category = "Bills",
+                        active = true, dueDay = 1, lastProcessedPeriod = period
+                    ),
+                    RecurringPaymentEntity(
+                        id = "demo-plan-sip", name = "Index fund SIP", amountMinor = 500_000L,
+                        frequency = "Monthly", due = "Day 8", accountId = savingsId, category = "Investments",
+                        active = true, dueDay = 8, lastProcessedPeriod = period,
+                        investmentType = InvestmentType.INDEX_FUND.name
+                    ),
+                    RecurringPaymentEntity(
+                        id = "demo-plan-insurance", name = "Health insurance", amountMinor = 1_800_000L,
+                        frequency = "Yearly", due = "Day 20", accountId = mainId, category = "Bills",
+                        active = false, dueDay = 20, lastProcessedPeriod = today.year.toString()
+                    ),
+                    RecurringPaymentEntity(
+                        id = "demo-plan-weekly", name = "Weekly allowance", amountMinor = 1_000_000L,
+                        frequency = "Weekly", due = "Every Monday", accountId = cashId, category = "Other",
+                        active = true, dueDay = 1, lastProcessedPeriod = weekPeriod
+                    )
+                )
+            )
+            dao.insertHoldings(
+                listOf(
+                    HoldingEntity("demo-holding-index", "Nifty index fund", InvestmentType.INDEX_FUND.name, "42.6 units", 7_450_000L, 6_800_000L, "demo-plan-sip"),
+                    HoldingEntity("demo-holding-stock", "Example Technologies", InvestmentType.STOCK.name, "12 shares", 3_250_000L, 2_900_000L, null),
+                    HoldingEntity("demo-holding-gold", "Digital gold", InvestmentType.OTHER.name, "4.2 g", 2_150_000L, 1_900_000L, null)
+                )
+            )
+            dao.insertIpo(
+                IpoEntity("demo-ipo", "Sample Mobility IPO", 15_000_000L, ipoDate.toString(), ipoDateMillis)
+            )
+            dao.insertFixedDeposit(
+                FixedDepositEntity(
+                    id = "demo-fixed-deposit", name = "One year fixed deposit", principalMinor = 5_000_000L,
+                    interestRateBps = 650, maturityDate = maturityDate.toString(),
+                    maturityDateMillis = maturityDateMillis, maturityAmountMinor = maturityAmount,
+                    accountId = savingsId
+                )
+            )
+        }
+        return true
     }
 
     suspend fun setCurrency(currency: Currency) {

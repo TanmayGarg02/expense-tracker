@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.walletmanager.data.model.InvestmentType
@@ -40,6 +42,7 @@ import com.example.walletmanager.data.model.RecurringPayment
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.ui.component.ScreenHeader
 import com.example.walletmanager.ui.component.WalletColors
+import com.example.walletmanager.ui.component.WalletActionButton
 import com.example.walletmanager.ui.component.WalletPage
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.formatMoney
@@ -93,12 +96,11 @@ fun PlansScreen(
                             )
                         }
                     }
-                    TextButton(onClick = { selectedPlan = item }) {
-                        Text("Edit")
-                    }
-                    TextButton(onClick = { togglePlan(item.id) }) {
-                        Text(if (item.active) "Pause" else "Start")
-                    }
+                    WalletActionButton("Edit", onClick = { selectedPlan = item })
+                    WalletActionButton(
+                        if (item.active) "Pause" else "Start",
+                        onClick = { togglePlan(item.id) }
+                    )
                 }
             }
         }
@@ -106,7 +108,7 @@ fun PlansScreen(
         Button(
             onClick = { showSheet = true },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(WalletGreen)
+            colors = ButtonDefaults.buttonColors(WalletColors.cream)
         ) {
             Text("+ Set up a recurring payment", color = WalletColors.ink, fontWeight = FontWeight.Bold)
         }
@@ -164,7 +166,9 @@ private fun PlanSheet(
     var frequency by remember { mutableStateOf(initial?.frequency ?: "Monthly") }
     var cashback by remember { mutableStateOf(initial?.cashbackMinor?.div(100.0)?.toString().orEmpty()) }
     var investment by remember { mutableStateOf(initial?.category == "Investments") }
-    var investmentType by remember { mutableStateOf(initial?.investmentType ?: InvestmentType.MUTUAL_FUND) }
+    var investmentType by remember {
+        mutableStateOf(initial?.investmentType?.displayCategory() ?: InvestmentType.MUTUAL_FUND)
+    }
     var accountId by remember { mutableStateOf(initial?.accountId ?: state.accounts.firstOrNull()?.id.orEmpty()) }
     val savePlan = rememberDebouncedClick {
         save(
@@ -209,7 +213,10 @@ private fun PlanSheet(
                 prefix = { Text("₹ ") },
                 modifier = Modifier.fillMaxWidth()
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilterChip(
                     selected = frequency == "Weekly",
                     onClick = { frequency = "Weekly" },
@@ -232,13 +239,21 @@ private fun PlanSheet(
                     Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InvestmentType.entries
-                        .filter { it != InvestmentType.SIP }
-                        .forEach { type ->
+                    InvestmentType.categories.forEach { type ->
                             FilterChip(
                                 selected = investmentType == type,
                                 onClick = { investmentType = type },
-                                label = { Text(type.name.replace('_', ' ')) }
+                                label = {
+                                    Text(
+                                        when (type) {
+                                            InvestmentType.STOCK -> "Stocks"
+                                            InvestmentType.MUTUAL_FUND -> "Mutual funds"
+                                            InvestmentType.INDEX_FUND -> "Index funds"
+                                            InvestmentType.OTHER -> "Other financial plans"
+                                            else -> type.name.replace('_', ' ')
+                                        }
+                                    )
+                                }
                             )
                         }
                 }
@@ -262,7 +277,12 @@ private fun PlanSheet(
                 prefix = { Text("₹ ") },
                 modifier = Modifier.fillMaxWidth()
             )
-            Text("Debited from account", color = WalletColors.muted)
+            Text(
+                "Debited from account",
+                modifier = Modifier.fillMaxWidth(),
+                color = WalletColors.muted,
+                textAlign = TextAlign.Center
+            )
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -271,7 +291,17 @@ private fun PlanSheet(
                     FilterChip(
                         selected = accountId == account.id,
                         onClick = { accountId = account.id },
-                        label = { Text(account.name) }
+                        label = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Text(account.name)
+                                if (accountId == account.id) {
+                                    Text("✓", color = WalletColors.ink, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -279,17 +309,32 @@ private fun PlanSheet(
                 onClick = savePlan,
                 enabled = name.isNotBlank() && amount.toDoubleOrNull()?.let { it > 0 } == true && accountId.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(WalletColors.cream)
             ) {
                 Text("Save Plan", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
-            if (delete != null) {
-                TextButton(onClick = delete, modifier = Modifier.fillMaxWidth()) {
-                    Text("Delete payment plan", color = WalletColors.red)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (delete != null) {
+                    OutlinedButton(
+                        onClick = delete,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = WalletColors.cream)
+                    ) {
+                        Text("Delete plan", color = WalletColors.cream)
+                    }
                 }
-            }
-            TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel")
+                OutlinedButton(
+                    onClick = dismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WalletColors.cream)
+                ) {
+                    Text("Cancel", color = WalletColors.cream)
+                }
             }
         }
     }

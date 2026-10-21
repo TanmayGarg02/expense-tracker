@@ -33,7 +33,18 @@ enum class InvestmentType {
     SIP,
     INSURANCE,
     GOLD,
-    OTHER
+    OTHER;
+
+    fun displayCategory(): InvestmentType = when (this) {
+        EQUITY -> STOCK
+        SIP -> MUTUAL_FUND
+        GOLD, INSURANCE -> OTHER
+        else -> this
+    }
+
+    companion object {
+        val categories = listOf(STOCK, MUTUAL_FUND, INDEX_FUND, OTHER)
+    }
 }
 
 data class Account(
