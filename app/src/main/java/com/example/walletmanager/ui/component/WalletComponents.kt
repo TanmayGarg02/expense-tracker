@@ -3,6 +3,7 @@ package com.example.walletmanager.ui.component
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +30,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -58,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import com.example.walletmanager.data.model.Account
 import com.example.walletmanager.data.model.AccountAccent
@@ -67,8 +71,17 @@ import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.ui.theme.WalletBackground
 import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletRed
 import com.example.walletmanager.ui.theme.WalletSurface
 import com.example.walletmanager.ui.theme.WalletText
+import com.example.walletmanager.ui.theme.WalletMuted
+import com.example.walletmanager.ui.theme.WalletAmber
+import com.example.walletmanager.ui.theme.WalletDivider
+import com.example.walletmanager.ui.theme.WalletBeige
+import com.example.walletmanager.ui.theme.WalletCream
+import com.example.walletmanager.ui.theme.WalletSage
+import com.example.walletmanager.ui.theme.WalletBlack
+import androidx.compose.ui.text.font.FontFamily
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -109,15 +122,18 @@ fun rememberDebouncedClick(
 }
 
 object WalletColors {
-    val muted = Color(0xFFB5A597)
-    val red = Color(0xFFE53935)
-    val green = Color(0xFF4CAF50)
-    val amber = Color(0xFFD9B27C)
+    val muted = WalletMuted
+    val red = WalletRed
+    val green = WalletGreen
+    val amber = WalletAmber
     val blue = Color(0xFF64B5F6)
     val purple = Color(0xFFB388FF)
-    val ink = Color(0xFF1C1815)
-    val cream = Color(0xFFF9F3EA)
-    val divider = Color(0xFF43352B)
+    val ink = WalletBlack
+    val cream = WalletCream
+    val beige = WalletBeige
+    val sage = WalletSage
+    val black = WalletBlack
+    val divider = WalletDivider
 }
 
 private val WalletMenuShape = RoundedCornerShape(18.dp)
@@ -141,22 +157,6 @@ data class ProfileHeaderState(
 )
 
 val LocalProfileHeader = staticCompositionLocalOf { ProfileHeaderState() }
-
-fun categoryEmoji(name: String): String = when (name.substringBefore(" · ").lowercase()) {
-    "food" -> "🍜"
-    "social life", "social" -> "👫"
-    "pets" -> "🐶"
-    "transport", "travel" -> "🚕"
-    "culture", "entertainment" -> "🖼"
-    "household" -> "🪑"
-    "shopping" -> "🛍"
-    "health" -> "🏥"
-    "bills" -> "💡"
-    "investments" -> "📈"
-    "income", "salary" -> "💵"
-    "cashback" -> "💸"
-    else -> "📦"
-}
 
 fun formatMoney(
     minor: Long,
@@ -278,22 +278,64 @@ fun ScreenHeader(
 
 @Composable
 fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold
-    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(WalletBeige)
+        )
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelMedium.copy(
+                letterSpacing = 1.6.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = WalletBeige
+        )
+    }
 }
 
 @Composable
-fun SummaryCard(label: String, amount: Long, state: WalletUiState) {
-    Card(colors = CardDefaults.cardColors(WalletSurface), shape = RoundedCornerShape(22.dp)) {
+fun SummaryCard(
+    label: String,
+    amount: Long,
+    state: WalletUiState,
+    amountColor: Color? = null
+) {
+    val color = amountColor ?: when {
+        label.contains("Expense", ignoreCase = true) || label.contains("Spent", ignoreCase = true) -> WalletColors.red
+        label.contains("Income", ignoreCase = true) || label.contains("Saved", ignoreCase = true) -> {
+            if (amount >= 0) WalletGreen else WalletColors.red
+        }
+        amount < 0 -> WalletColors.red
+        else -> WalletCream
+    }
+    Card(
+        colors = CardDefaults.cardColors(WalletSurface),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.border(1.dp, WalletBeige.copy(alpha = 0.16f), RoundedCornerShape(22.dp))
+    ) {
         Column(Modifier.padding(18.dp)) {
-            Text(label, color = WalletColors.muted)
+            Text(
+                label.uppercase(),
+                color = WalletColors.muted,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                letterSpacing = 1.2.sp
+            )
+            Spacer(Modifier.height(4.dp))
             Text(
                 formatMoney(amount, state.balancesVisible, state.baseCurrency),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = color
             )
         }
     }
@@ -317,12 +359,7 @@ fun MoreRow(glyph: String, title: String, subtitle: String = "", onClick: () -> 
                 .background(WalletGreen.copy(alpha = .12f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = glyph,
-                color = WalletGreen,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
+            WalletIcon(glyph, color = WalletGreen, size = 21.dp)
         }
         Column(
             Modifier
@@ -338,14 +375,35 @@ fun MoreRow(glyph: String, title: String, subtitle: String = "", onClick: () -> 
 }
 
 @Composable
+fun WalletActionButton(
+    label: String,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+    destructiveColor: Color = WalletColors.red
+) {
+    val actionColor = if (destructive) destructiveColor else WalletColors.beige
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, actionColor.copy(alpha = 0.7f)),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = actionColor)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
 fun BalanceCard(
     state: WalletUiState,
     toggleBalances: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(WalletGreen),
+        colors = CardDefaults.cardColors(WalletSurface),
         shape = RoundedCornerShape(26.dp),
-        modifier = Modifier.shadow(12.dp, RoundedCornerShape(26.dp))
+        modifier = Modifier
+            .shadow(12.dp, RoundedCornerShape(26.dp))
+            .border(1.dp, WalletBeige.copy(alpha = 0.16f), RoundedCornerShape(26.dp))
     ) {
         Column(
             Modifier.padding(22.dp),
@@ -354,32 +412,37 @@ fun BalanceCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "NET BALANCE THIS MONTH",
-                    color = WalletColors.ink.copy(alpha = .65f),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    color = WalletColors.muted,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.2.sp,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = toggleBalances) {
                     Text(
                         text = if (state.balancesVisible) "◉" else "—",
-                        color = WalletColors.ink
+                        color = WalletBeige,
+                        fontSize = 16.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }
 
             Text(
                 text = formatMoney(state.monthlyNetMinor, state.balancesVisible, state.baseCurrency),
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
-                color = WalletColors.ink
+                fontFamily = FontFamily.Monospace,
+                color = if (state.monthlyNetMinor >= 0) WalletGreen else WalletColors.red
             )
 
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Metric("Income", state.monthlyIncomeMinor, state, Modifier.weight(1f))
-                Metric("Spent", state.monthlyExpenseMinor, state, Modifier.weight(1f))
+                Metric("Income", state.monthlyIncomeMinor, state, WalletGreen, Modifier.weight(1f))
+                Metric("Spent", state.monthlyExpenseMinor, state, WalletColors.red, Modifier.weight(1f))
             }
         }
     }
@@ -390,23 +453,29 @@ private fun Metric(
     label: String,
     amount: Long,
     state: WalletUiState,
+    amountColor: Color,
     modifier: Modifier
 ) {
     Column(
         modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(WalletColors.ink.copy(alpha = .12f))
+            .background(WalletBlack.copy(alpha = .45f))
+            .border(1.dp, WalletBeige.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
             .padding(12.dp)
     ) {
         Text(
-            text = label,
-            color = WalletColors.ink.copy(alpha = .65f),
-            fontSize = 12.sp
+            text = label.uppercase(),
+            color = WalletColors.muted,
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 1.sp
         )
         Text(
             text = formatMoney(amount, state.balancesVisible, state.baseCurrency),
-            color = WalletColors.ink,
-            fontWeight = FontWeight.Bold
+            color = amountColor,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 15.sp
         )
     }
 }
@@ -432,8 +501,8 @@ fun QuickAction(
                 onClick = {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     clickScope.launch {
-                        iconScale.animateTo(1.14f, tween(70))
-                        iconScale.animateTo(1f, tween(110))
+                        iconScale.animateTo(1.12f, tween(50, easing = FastOutSlowInEasing))
+                        iconScale.animateTo(1f, tween(75, easing = FastOutSlowInEasing))
                     }
                     debouncedClick()
                 }
@@ -449,17 +518,13 @@ fun QuickAction(
                 .background(color.copy(alpha = .15f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = glyph,
-                color = color,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            WalletIcon(glyph, color = color, size = 19.dp)
         }
         Text(
             text = label,
             color = WalletColors.muted,
             fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
             modifier = Modifier.padding(top = 4.dp)
         )
     }
@@ -478,28 +543,28 @@ fun TransactionRow(
     Row(
         Modifier
             .debounceClickable(onClick = onClick)
-            .padding(vertical = 13.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(13.dp))
-                .background(if (isIncome) WalletGreen.copy(alpha = .14f) else WalletColors.red.copy(alpha = .12f)),
+                .background(if (isIncome) WalletGreen.copy(alpha = .14f) else WalletColors.red.copy(alpha = .12f))
+                .border(1.dp, if (isIncome) WalletGreen.copy(alpha = .28f) else WalletColors.red.copy(alpha = .22f), RoundedCornerShape(13.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = if (isIncome) "💰" else categoryEmoji(item.category),
+            WalletIcon(
+                name = if (isIncome) "income" else categoryIconName(item.category),
                 color = if (isIncome) WalletGreen else WalletColors.red,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                size = 19.dp
             )
         }
 
         Spacer(Modifier.width(12.dp))
 
         Column(Modifier.weight(1f)) {
-            Text(item.title, fontWeight = FontWeight.SemiBold)
+            Text(item.title, fontWeight = FontWeight.SemiBold, color = WalletCream)
             Text(
                 text = "${item.category} · $account",
                 color = WalletColors.muted,
@@ -511,12 +576,14 @@ fun TransactionRow(
             Text(
                 text = (if (isIncome) "+" else "−") + formatMoney(item.amountMinor, true, currency),
                 fontWeight = FontWeight.Bold,
-                color = if (isIncome) WalletGreen else WalletText
+                fontFamily = FontFamily.Monospace,
+                color = if (isIncome) WalletGreen else WalletColors.red
             )
             Text(
                 text = item.date,
                 color = WalletColors.muted,
-                fontSize = 12.sp
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
             )
         }
     }
@@ -540,7 +607,9 @@ fun AccountRow(
         onClick = onClick
     ) {
         Row(
-            Modifier.padding(18.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -559,16 +628,38 @@ fun AccountRow(
 
             Spacer(Modifier.width(13.dp))
 
-            Column(Modifier.weight(1f)) {
-                Text(account.name, fontWeight = FontWeight.Bold)
-                Text(account.type, color = WalletColors.muted, fontSize = 12.sp)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
+            ) {
+                Text(
+                    account.name,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    account.type,
+                    color = WalletColors.muted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            Text(
-                text = formatMoney(account.balanceMinor, state.balancesVisible, state.baseCurrency),
-                fontWeight = FontWeight.Bold,
-                color = if (account.balanceMinor < 0) WalletColors.red else WalletText
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = formatMoney(account.balanceMinor, state.balancesVisible, state.baseCurrency),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = if (account.balanceMinor < 0) WalletColors.red else WalletText,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("Balance", color = WalletColors.muted, fontSize = 11.sp)
+            }
         }
     }
 }

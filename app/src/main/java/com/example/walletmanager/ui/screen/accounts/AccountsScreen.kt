@@ -1,8 +1,8 @@
 package com.example.walletmanager.ui.screen.accounts
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -59,7 +59,10 @@ import com.example.walletmanager.ui.component.AccountRow
 import com.example.walletmanager.ui.component.ScreenHeader
 import com.example.walletmanager.ui.component.SummaryCard
 import com.example.walletmanager.ui.component.WalletColors
+import com.example.walletmanager.ui.component.WalletActionButton
+import com.example.walletmanager.ui.component.WalletIcon
 import com.example.walletmanager.ui.component.WalletPage
+import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.walletDropdownItem
@@ -67,6 +70,7 @@ import com.example.walletmanager.ui.component.walletDropdownSurface
 import com.example.walletmanager.ui.component.rememberDebouncedClick
 import com.example.walletmanager.ui.navigation.AccountDetailsRoute
 import com.example.walletmanager.ui.navigation.WalletRoute
+import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.theme.WalletGreen
 import com.example.walletmanager.ui.theme.WalletSurface
 import java.time.LocalDate
@@ -104,7 +108,6 @@ fun AccountsScreen(
                 Text("Everything in one view", color = WalletColors.muted, fontSize = 14.sp)
             }
         }
-        Spacer(Modifier.height(12.dp))
         SummaryCard("Total across accounts", state.balanceMinor, state)
 
         state.accounts.forEach { account ->
@@ -124,29 +127,33 @@ fun AccountsScreen(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("🏦 Fixed deposits", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            Text("Fixed deposits", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    if (fixedDepositsExpanded) "▴" else "▾",
+                WalletIcon(
+                    if (fixedDepositsExpanded) "chevron_up" else "chevron_down",
                     color = WalletColors.muted,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
+                    size = 18.dp
                 )
             }
         }
-        Column(Modifier.fillMaxWidth().animateContentSize(animationSpec = tween(180))) {
+        Column(Modifier.fillMaxWidth()) {
             AnimatedVisibility(
                 visible = fixedDepositsExpanded,
-                enter = expandVertically(animationSpec = tween(180)) + fadeIn(animationSpec = tween(140)),
-                exit = shrinkVertically(animationSpec = tween(180)) + fadeOut(animationSpec = tween(140))
+                enter = expandVertically(
+                    animationSpec = tween(140, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(100, easing = FastOutSlowInEasing)),
+                exit = shrinkVertically(
+                    animationSpec = tween(110, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(80, easing = FastOutSlowInEasing))
             ) {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { showFixedDepositSheet = true },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(WalletGreen)
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(WalletBeige)
                     ) {
-                        Text("+ FD", color = WalletColors.ink, fontWeight = FontWeight.Bold)
+                        Text("+ Add fixed deposit", color = WalletColors.ink, fontWeight = FontWeight.Bold)
                     }
                     state.fixedDeposits.forEach { deposit ->
                         FixedDepositRow(
@@ -160,12 +167,11 @@ fun AccountsScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
         Button(
             onClick = { showAddSheet = true },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(WalletGreen)
+            colors = ButtonDefaults.buttonColors(WalletBeige)
         ) {
             Text("+ Add Bank Account", color = WalletColors.ink, fontWeight = FontWeight.Bold)
         }
@@ -221,7 +227,7 @@ private fun AddAccountSheet(
         save(name, type)
     }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -297,8 +303,8 @@ private fun FixedDepositRow(
                 fontWeight = FontWeight.Bold
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = edit) { Text("Edit") }
-                TextButton(onClick = delete) { Text("Delete", color = WalletColors.red) }
+                WalletActionButton("Edit", edit)
+                WalletActionButton("Delete", delete, destructive = true)
             }
         }
     }
