@@ -12,13 +12,16 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.walletmanager.ui.component.WalletColors
-import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.component.WalletIcon
+import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.theme.WalletSurface
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -31,14 +34,15 @@ fun WalletNavigationBar(
     onNavigate: (WalletRoute) -> Unit
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val labelFontSize = (screenWidthDp / 33f).coerceIn(10f, 12f).sp
+    val labelFontSize = (screenWidthDp / 32f).coerceIn(10f, 12f).sp
+    val investmentsLabelFontSize = (screenWidthDp / 34f).coerceIn(10.5f, 12.5f).sp
 
     val destinations = listOf(
-        Triple(HomeRoute, "🏠", "Home"),
-        Triple(AccountsRoute, "💳", "Accounts"),
-        Triple(StatsRoute, "📊", "Stats"),
-        Triple(InvestmentsRoute, "📈", "Investments"),
-        Triple(MoreRoute(), "⚙️", "Settings")
+        Triple(HomeRoute, "home", "Home"),
+        Triple(AccountsRoute, "accounts", "Accounts"),
+        Triple(StatsRoute, "stats", "Stats"),
+        Triple(InvestmentsRoute, "investments", "Investments"),
+        Triple(MoreRoute(), "more", "Settings")
     )
 
     NavigationBar(
@@ -48,9 +52,17 @@ fun WalletNavigationBar(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(28.dp) },
-                effects = { blur(18.dp.toPx()) },
+                effects = { blur(44.dp.toPx()) },
                 onDrawSurface = {
-                    drawRect(WalletSurface.copy(alpha = 0.92f))
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                WalletSurface.copy(alpha = 0.90f),
+                                WalletSurface.copy(alpha = 0.84f)
+                            )
+                        ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(28.dp.toPx())
+                    )
                 }
             )
             .shadow(12.dp, RoundedCornerShape(28.dp))
@@ -60,7 +72,7 @@ fun WalletNavigationBar(
                 WalletColors.cream.copy(alpha = 0.18f),
                 RoundedCornerShape(28.dp)
             ),
-        containerColor = WalletSurface.copy(alpha = 0.82f),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         tonalElevation = 0.dp,
         windowInsets = WindowInsets(0, 0, 0, 0)
     ) {
@@ -70,23 +82,37 @@ fun WalletNavigationBar(
                 selected = selected,
                 onClick = { onNavigate(route) },
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(
+                        when (label) {
+                            "Accounts", "Settings" -> 1.15f
+                            "Investments" -> 1.25f
+                            else -> 1f
+                        }
+                    )
                     .clip(RoundedCornerShape(24.dp))
                     .background(
                         if (selected) {
-                            WalletGreen.copy(alpha = 0.28f)
+                            WalletBeige.copy(alpha = 0.22f)
                         } else {
                             WalletSurface.copy(alpha = 0f)
                         }
                     ),
-                icon = { Text(text = glyph, fontSize = 19.sp) },
-                label = { Text(label, fontSize = labelFontSize) },
+                icon = { WalletIcon(glyph, color = if (selected) WalletBeige else WalletColors.muted, size = 20.dp) },
+                label = {
+                    Text(
+                        text = label,
+                        fontSize = if (label == "Investments") investmentsLabelFontSize else labelFontSize,
+                        maxLines = 1,
+                        softWrap = false,
+                        textAlign = TextAlign.Center
+                    )
+                },
                 alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
                     indicatorColor = WalletSurface.copy(alpha = 0f),
-                    selectedIconColor = WalletColors.cream,
+                    selectedIconColor = WalletBeige,
                     unselectedIconColor = WalletColors.muted,
-                    selectedTextColor = WalletColors.cream,
+                    selectedTextColor = WalletBeige,
                     unselectedTextColor = WalletColors.muted
                 )
             )
