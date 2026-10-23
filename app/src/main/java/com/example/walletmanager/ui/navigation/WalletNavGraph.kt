@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -18,11 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -49,6 +50,10 @@ import com.example.walletmanager.ui.screen.reports.WeeklyScreen
 import com.example.walletmanager.ui.screen.stats.StatsScreen
 import com.example.walletmanager.ui.component.LocalProfileHeader
 import com.example.walletmanager.ui.component.ProfileHeaderState
+import com.example.walletmanager.ui.component.LocalWalletSnackbarController
+import com.example.walletmanager.ui.component.WalletSnackbarHost
+import com.example.walletmanager.ui.component.rememberWalletSnackbarController
+import com.example.walletmanager.ui.component.WalletPageBackgroundBrush
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -115,9 +120,9 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
         }
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarController = rememberWalletSnackbarController()
     LaunchedEffect(Unit) {
-        vm.events.collect { snackbarHostState.showSnackbar(it) }
+        vm.events.collect { snackbarController.show(it) }
     }
 
     LaunchedEffect(state.fixedDeposits, state.accounts) {
@@ -134,22 +139,31 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
         LocalProfileHeader provides ProfileHeaderState(
             name = state.profileName,
             imageUri = state.profileImageUri
-        )
+        ),
+        LocalWalletSnackbarController provides snackbarController
     ) {
         val navigationBackdrop = rememberLayerBackdrop()
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(WalletPageBackgroundBrush)
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(WalletPageBackgroundBrush)
                     .layerBackdrop(navigationBackdrop)
             ) {
                 Scaffold(
-                    snackbarHost = { SnackbarHost(snackbarHostState) }
+                    containerColor = Color.Transparent,
+                    contentColor = com.example.walletmanager.ui.theme.WalletText,
+                    snackbarHost = { WalletSnackbarHost() }
                 ) { padding ->
                     NavHost(
                         navController = navController,
                         startDestination = HomeRoute,
-                        modifier = Modifier.padding(padding)
+                        modifier = Modifier
+                            .padding(padding)
                     ) {
             composable<HomeRoute> {
                 HomeScreen(
@@ -227,7 +241,9 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
                 InvestmentsScreen(
                     state = state,
                     addHolding = vm::addHolding,
+                    addPlatform = vm::addBrokeragePlatform,
                     editHolding = vm::editHolding,
+                    exitHolding = vm::exitHolding,
                     addIpo = { ipo: PendingIpo ->
                         vm.addIpo(ipo)
                         if (
@@ -255,7 +271,7 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
             composable<PlansRoute> {
                 PlansScreen(
                     state = state,
-                    addPlan = { name, amount, frequency, cashback, investment, accountId, investmentType ->
+                    addPlan = { name, amount, frequency, cashback, investment, accountId, investmentType, investmentHoldingId, investmentPlatformAccountId ->
                         vm.addRecurringPayment(
                             name = name,
                             amountMinor = amount,
@@ -263,7 +279,9 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
                             cashbackMinor = cashback,
                             accountId = accountId,
                             investmentType = investmentType,
-                            category = if (investment) "Investments" else "Bills"
+                            category = if (investment) "Investments" else "Bills",
+                            investmentHoldingId = investmentHoldingId,
+                            investmentPlatformAccountId = investmentPlatformAccountId
                         )
                     },
                     editPlan = vm::editRecurringPayment,
@@ -295,6 +313,7 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
                     addReminder = ::addReminder,
                     setProfile = vm::setProfile,
                     wipeData = vm::wipeData,
+                    addSampleData = vm::addSampleData,
                     onBack = if (route.openProfile) ({ navController.popBackStack() }) else null,
                     openProfileOnEntry = route.openProfile
                 )
@@ -306,11 +325,12 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(
                         start = 16.dp,
                         end = 16.dp,
                         top = 8.dp,
-                        bottom = 16.dp
+                        bottom = 12.dp
                     )
             ) {
                 WalletNavigationBar(

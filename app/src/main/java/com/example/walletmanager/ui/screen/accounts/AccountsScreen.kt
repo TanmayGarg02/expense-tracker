@@ -8,7 +8,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,11 +19,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -32,7 +38,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -47,19 +52,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.walletmanager.data.model.FixedDeposit
+import com.example.walletmanager.data.model.AccountAccent
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.data.model.calculateFixedDepositMaturity
-import com.example.walletmanager.ui.component.AccountRow
-import com.example.walletmanager.ui.component.ScreenHeader
-import com.example.walletmanager.ui.component.SummaryCard
+import com.example.walletmanager.ui.component.TransactionRow
 import com.example.walletmanager.ui.component.WalletColors
 import com.example.walletmanager.ui.component.WalletActionButton
+import com.example.walletmanager.ui.component.WalletConfirmDialog
+import com.example.walletmanager.ui.component.walletGlassBorder
 import com.example.walletmanager.ui.component.WalletIcon
 import com.example.walletmanager.ui.component.WalletPage
 import com.example.walletmanager.ui.component.WalletModalBottomSheet
@@ -71,8 +81,11 @@ import com.example.walletmanager.ui.component.rememberDebouncedClick
 import com.example.walletmanager.ui.navigation.AccountDetailsRoute
 import com.example.walletmanager.ui.navigation.WalletRoute
 import com.example.walletmanager.ui.theme.WalletBeige
+import com.example.walletmanager.ui.theme.WalletCream
 import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletGreenAccent
 import com.example.walletmanager.ui.theme.WalletSurface
+import com.example.walletmanager.ui.theme.WalletSurfaceVariant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.math.BigDecimal
@@ -104,18 +117,54 @@ fun AccountsScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Your accounts", fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                Text("Everything in one view", color = WalletColors.muted, fontSize = 14.sp)
+                Text("Accounts", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                Text("${state.accounts.size} accounts", color = WalletColors.muted, fontSize = 13.sp)
+            }
+            OutlinedButton(
+                onClick = { showAddSheet = true },
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 13.dp, vertical = 7.dp),
+                border = BorderStroke(1.dp, WalletBeige.copy(alpha = 0.45f))
+            ) {
+                Text("+", color = WalletBeige, fontSize = 22.sp, lineHeight = 22.sp)
             }
         }
-        SummaryCard("Total across accounts", state.balanceMinor, state)
 
-        state.accounts.forEach { account ->
-            AccountRow(
-                account = account,
-                state = state,
-                onClick = { open(AccountDetailsRoute(account.id)) }
-            )
+        if (state.accounts.isEmpty()) {
+            Text("Add an account to get started.", color = WalletColors.muted)
+        } else {
+            val displayedAccents = mutableSetOf<AccountAccent>()
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                state.accounts.forEach { account ->
+                    val accent = if (account.accent in displayedAccents) {
+                        AccountAccent.values().firstOrNull { it !in displayedAccents } ?: account.accent
+                    } else account.accent
+                    displayedAccents += accent
+                    WalletAccountCard(
+                        account = account.copy(accent = accent),
+                        state = state,
+                        onClick = { open(AccountDetailsRoute(account.id)) }
+                    )
+                }
+            }
+        }
+
+        Text("Transactions", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        if (state.transactions.isEmpty()) {
+            Text("Your recent transactions will appear here.", color = WalletColors.muted)
+        } else {
+            Column(Modifier.fillMaxWidth()) {
+                state.transactions.take(5).forEach { transaction ->
+                    TransactionRow(
+                        item = transaction,
+                        accounts = state.accounts,
+                        currency = state.baseCurrency
+                    )
+                }
+            }
         }
 
         Row(
@@ -165,15 +214,6 @@ fun AccountsScreen(
                     }
                 }
             }
-        }
-
-        Button(
-            onClick = { showAddSheet = true },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(WalletBeige)
-        ) {
-            Text("+ Add Bank Account", color = WalletColors.ink, fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(70.dp))
@@ -247,8 +287,11 @@ private fun AddAccountSheet(
                 label = { Text("Account name") },
                 modifier = Modifier.fillMaxWidth()
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Bank account", "Cash", "Credit card").forEach { option ->
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("Bank account", "Cash", "Credit card", "Brokerage").forEach { option ->
                     FilterChip(
                         selected = type == option,
                         onClick = { type = option },
@@ -256,11 +299,17 @@ private fun AddAccountSheet(
                     )
                 }
             }
+            if (type == "Brokerage") {
+                Text(
+                    "For cash held at an investment broker, such as Zerodha funds.",
+                    color = WalletColors.muted
+                )
+            }
             Button(
                 onClick = saveAccount,
                 enabled = name.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(WalletBeige)
             ) {
                 Text("Add account", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
@@ -275,16 +324,106 @@ private fun AddAccountSheet(
 }
 
 @Composable
+private fun WalletAccountCard(
+    account: com.example.walletmanager.data.model.Account,
+    state: WalletUiState,
+    onClick: () -> Unit
+) {
+    val accent = when (account.accent) {
+        AccountAccent.Green -> WalletGreenAccent
+        AccountAccent.Purple -> Color(0xFFB29ACB)
+        AccountAccent.Amber -> Color(0xFFC7A56F)
+        AccountAccent.Pink -> Color(0xFFD18FA2)
+        AccountAccent.Blue -> Color(0xFF86A9CE)
+    }
+    val shape = RoundedCornerShape(22.dp)
+
+    Box(
+        Modifier
+            .width(292.dp)
+            .height(202.dp)
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(accent.copy(alpha = 0.26f), WalletSurfaceVariant.copy(alpha = 0.94f), WalletSurface)
+                )
+            )
+            .walletGlassBorder(shape, accent)
+            .clickable(onClick = onClick)
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val center = Offset(size.width * 0.92f, size.height * 0.32f)
+            for (ring in 0..5) {
+                drawCircle(
+                    color = WalletCream.copy(alpha = 0.035f + ring * 0.006f),
+                    radius = size.minDimension * (0.28f + ring * 0.09f),
+                    center = center,
+                    style = Stroke(width = 1.dp.toPx())
+                )
+            }
+        }
+        Column(
+            Modifier.fillMaxSize().padding(19.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(WalletCream.copy(alpha = 0.09f))
+                        .border(1.dp, WalletCream.copy(alpha = 0.17f), RoundedCornerShape(11.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    WalletIcon("accounts", color = accent, size = 20.dp)
+                }
+                Column(Modifier.padding(start = 11.dp).weight(1f)) {
+                    Text(account.type.uppercase(), color = WalletColors.cream, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(state.baseCurrency.code, color = WalletColors.muted, fontSize = 11.sp)
+                }
+                Text("WALLET", color = WalletColors.muted, fontSize = 10.sp, letterSpacing = 1.sp)
+            }
+
+            Text(
+                formatMoney(account.balanceMinor, state.balancesVisible, state.baseCurrency),
+                color = WalletColors.cream,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text("ACCOUNT", color = WalletColors.muted, fontSize = 9.sp, letterSpacing = 1.2.sp)
+                    Text(account.name, color = WalletColors.cream, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(accent.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(account.name.firstOrNull()?.uppercase() ?: "W", color = accent, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun FixedDepositRow(
     deposit: FixedDeposit,
     state: WalletUiState,
     edit: () -> Unit,
     delete: () -> Unit
 ) {
+    var confirmDelete by rememberSaveable(deposit.id) { mutableStateOf(false) }
     val linkedAccount = state.accounts.firstOrNull { it.id == deposit.accountId }
     Card(
-        colors = CardDefaults.cardColors(WalletSurface),
-        shape = RoundedCornerShape(18.dp)
+        colors = CardDefaults.cardColors(WalletSurface.copy(alpha = 0.88f)),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.walletGlassBorder(RoundedCornerShape(18.dp))
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -304,9 +443,20 @@ private fun FixedDepositRow(
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 WalletActionButton("Edit", edit)
-                WalletActionButton("Delete", delete, destructive = true)
+                WalletActionButton("Delete", { confirmDelete = true }, destructive = true)
             }
         }
+    }
+    if (confirmDelete) {
+        WalletConfirmDialog(
+            title = "Delete fixed deposit?",
+            message = "This fixed deposit will be removed.",
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                confirmDelete = false
+                delete()
+            }
+        )
     }
 }
 
@@ -400,7 +550,7 @@ private fun FixedDepositSheet(
         }
     }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -518,7 +668,7 @@ private fun FixedDepositSheet(
             Button(
                 onClick = saveDeposit,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(WalletBeige)
             ) {
                 Text("Save fixed deposit", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
