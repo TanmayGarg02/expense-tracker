@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -48,6 +50,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -71,7 +74,9 @@ import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.ui.theme.WalletBackground
 import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletGreenAccent
 import com.example.walletmanager.ui.theme.WalletRed
+import com.example.walletmanager.ui.theme.WalletRedAccent
 import com.example.walletmanager.ui.theme.WalletSurface
 import com.example.walletmanager.ui.theme.WalletText
 import com.example.walletmanager.ui.theme.WalletMuted
@@ -81,6 +86,7 @@ import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.theme.WalletCream
 import com.example.walletmanager.ui.theme.WalletSage
 import com.example.walletmanager.ui.theme.WalletBlack
+import com.example.walletmanager.ui.theme.WalletButtonInk
 import androidx.compose.ui.text.font.FontFamily
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -125,10 +131,12 @@ object WalletColors {
     val muted = WalletMuted
     val red = WalletRed
     val green = WalletGreen
+    val redAccent = WalletRedAccent
+    val greenAccent = WalletGreenAccent
     val amber = WalletAmber
     val blue = Color(0xFF64B5F6)
     val purple = Color(0xFFB388FF)
-    val ink = WalletBlack
+    val ink = WalletButtonInk
     val cream = WalletCream
     val beige = WalletBeige
     val sage = WalletSage
@@ -138,6 +146,44 @@ object WalletColors {
 
 private val WalletMenuShape = RoundedCornerShape(18.dp)
 private val WalletMenuItemShape = RoundedCornerShape(12.dp)
+val WalletPageBackgroundBrush = Brush.verticalGradient(
+    listOf(
+        Color(0xFF12151A),
+        WalletBackground,
+        Color(0xFF121316)
+    )
+)
+
+fun Modifier.walletGlassBorder(shape: RoundedCornerShape, accent: Color? = null): Modifier = border(
+    BorderStroke(
+        1.dp,
+        Brush.linearGradient(
+            if (accent == null) {
+                listOf(
+                    WalletCream.copy(alpha = 0.32f),
+                    WalletBeige.copy(alpha = 0.11f),
+                    WalletCream.copy(alpha = 0.18f)
+                )
+            } else {
+                    listOf(accent.copy(alpha = 0.58f), WalletCream.copy(alpha = 0.14f), accent.copy(alpha = 0.30f))
+            }
+        )
+    ),
+    shape
+)
+
+fun Modifier.walletGlassSurface(shape: RoundedCornerShape): Modifier =
+    clip(shape)
+        .background(
+            Brush.verticalGradient(
+                listOf(
+                    WalletCream.copy(alpha = 0.10f),
+                    WalletSurface.copy(alpha = 0.86f),
+                    WalletSurface.copy(alpha = 0.76f)
+                )
+            )
+        )
+        .walletGlassBorder(shape)
 
 fun Modifier.walletDropdownSurface(): Modifier =
     shadow(10.dp, WalletMenuShape)
@@ -176,12 +222,14 @@ fun WalletPage(
     Column(
         Modifier
             .fillMaxSize()
-            .background(WalletBackground)
             .verticalScroll(rememberScrollState())
             .padding(padding)
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
-        content = content
+        content = {
+            content()
+            Spacer(Modifier.height(84.dp))
+        }
     )
 }
 
@@ -249,13 +297,12 @@ fun ScreenHeader(
         }
         Box(
             Modifier
-                .size(42.dp)
-                .clip(CircleShape)
+                .size(44.dp)
+                .walletGlassSurface(RoundedCornerShape(50.dp))
                 .clickable(
                     enabled = onProfileClick != null,
                     onClick = { onProfileClick?.invoke() }
-                )
-                .background(WalletSurface),
+                ),
             contentAlignment = Alignment.Center
         ) {
             if (profileImage != null) {
@@ -316,12 +363,30 @@ fun SummaryCard(
         amount < 0 -> WalletColors.red
         else -> WalletCream
     }
+    val accentColor = when {
+        label.contains("Expense", ignoreCase = true) || label.contains("Spent", ignoreCase = true) -> WalletRedAccent
+        label.contains("Income", ignoreCase = true) || label.contains("Saved", ignoreCase = true) -> {
+            if (amount >= 0) WalletGreenAccent else WalletRedAccent
+        }
+        amount < 0 -> WalletRedAccent
+        else -> color
+    }
     Card(
-        colors = CardDefaults.cardColors(WalletSurface),
+        colors = CardDefaults.cardColors(Color.Transparent),
         shape = RoundedCornerShape(22.dp),
-        modifier = Modifier.border(1.dp, WalletBeige.copy(alpha = 0.16f), RoundedCornerShape(22.dp))
+        modifier = Modifier.walletGlassBorder(RoundedCornerShape(22.dp))
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(accentColor.copy(alpha = 0.20f), WalletSurface.copy(alpha = 0.86f), WalletSurface.copy(alpha = 0.78f))
+                    )
+                )
+                .padding(18.dp)
+        ) {
             Text(
                 label.uppercase(),
                 color = WalletColors.muted,
@@ -346,8 +411,7 @@ fun MoreRow(glyph: String, title: String, subtitle: String = "", onClick: () -> 
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(WalletSurface)
+            .walletGlassSurface(RoundedCornerShape(18.dp))
             .debounceClickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -356,10 +420,10 @@ fun MoreRow(glyph: String, title: String, subtitle: String = "", onClick: () -> 
             Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(WalletGreen.copy(alpha = .12f)),
+                .background(WalletGreenAccent.copy(alpha = .12f)),
             contentAlignment = Alignment.Center
         ) {
-            WalletIcon(glyph, color = WalletGreen, size = 21.dp)
+            WalletIcon(glyph, color = WalletGreenAccent, size = 21.dp)
         }
         Column(
             Modifier
@@ -379,18 +443,60 @@ fun WalletActionButton(
     label: String,
     onClick: () -> Unit,
     destructive: Boolean = false,
-    destructiveColor: Color = WalletColors.red
+    destructiveColor: Color = WalletColors.red,
+    compact: Boolean = false
 ) {
     val actionColor = if (destructive) destructiveColor else WalletColors.beige
     OutlinedButton(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, actionColor.copy(alpha = 0.7f)),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        border = BorderStroke(
+            1.dp,
+            (if (destructive) WalletColors.redAccent else actionColor).copy(alpha = 0.7f)
+        ),
+        contentPadding = PaddingValues(horizontal = if (compact) 8.dp else 10.dp, vertical = 0.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = actionColor)
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium)
+        Text(
+            label,
+            style = if (compact) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium
+        )
     }
+}
+
+@Composable
+fun WalletConfirmDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    confirmLabel: String = "Delete"
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        text = { Text(message, style = MaterialTheme.typography.bodyMedium, color = WalletColors.muted) },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = WalletColors.redAccent)
+            ) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Cancel")
+            }
+        },
+        shape = RoundedCornerShape(18.dp),
+        containerColor = WalletSurface
+    )
 }
 
 @Composable
@@ -399,11 +505,11 @@ fun BalanceCard(
     toggleBalances: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(WalletSurface),
+        colors = CardDefaults.cardColors(WalletSurface.copy(alpha = 0.86f)),
         shape = RoundedCornerShape(26.dp),
         modifier = Modifier
             .shadow(12.dp, RoundedCornerShape(26.dp))
-            .border(1.dp, WalletBeige.copy(alpha = 0.16f), RoundedCornerShape(26.dp))
+            .walletGlassBorder(RoundedCornerShape(26.dp))
     ) {
         Column(
             Modifier.padding(22.dp),
@@ -441,8 +547,8 @@ fun BalanceCard(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Metric("Income", state.monthlyIncomeMinor, state, WalletGreen, Modifier.weight(1f))
-                Metric("Spent", state.monthlyExpenseMinor, state, WalletColors.red, Modifier.weight(1f))
+                Metric("Income", state.monthlyIncomeMinor, state, WalletGreenAccent, Modifier.weight(1f))
+                Metric("Spent", state.monthlyExpenseMinor, state, WalletRedAccent, Modifier.weight(1f))
             }
         }
     }
@@ -456,11 +562,20 @@ private fun Metric(
     amountColor: Color,
     modifier: Modifier
 ) {
+    val textColor = when (amountColor) {
+        WalletGreenAccent -> WalletGreen
+        WalletRedAccent -> WalletRed
+        else -> amountColor
+    }
     Column(
         modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(WalletBlack.copy(alpha = .45f))
-            .border(1.dp, WalletBeige.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(amountColor.copy(alpha = 0.17f), WalletBlack.copy(alpha = .45f))
+                )
+            )
+            .border(1.dp, amountColor.copy(alpha = 0.24f), RoundedCornerShape(14.dp))
             .padding(12.dp)
     ) {
         Text(
@@ -472,7 +587,7 @@ private fun Metric(
         )
         Text(
             text = formatMoney(amount, state.balancesVisible, state.baseCurrency),
-            color = amountColor,
+            color = textColor,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             fontSize = 15.sp
@@ -515,7 +630,12 @@ fun QuickAction(
                 .scale(iconScale.value)
                 .shadow(4.dp, CircleShape)
                 .clip(CircleShape)
-                .background(color.copy(alpha = .15f)),
+                .background(
+                    Brush.radialGradient(
+                        listOf(color.copy(alpha = 0.32f), color.copy(alpha = 0.08f), WalletSurface.copy(alpha = 0.8f))
+                    )
+                )
+                .border(1.dp, color.copy(alpha = 0.28f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             WalletIcon(glyph, color = color, size = 19.dp)
@@ -550,13 +670,21 @@ fun TransactionRow(
             Modifier
                 .size(40.dp)
                 .clip(RoundedCornerShape(13.dp))
-                .background(if (isIncome) WalletGreen.copy(alpha = .14f) else WalletColors.red.copy(alpha = .12f))
-                .border(1.dp, if (isIncome) WalletGreen.copy(alpha = .28f) else WalletColors.red.copy(alpha = .22f), RoundedCornerShape(13.dp)),
+                .background(
+                    Brush.radialGradient(
+                        if (isIncome) {
+                            listOf(WalletGreenAccent.copy(alpha = 0.28f), WalletGreenAccent.copy(alpha = 0.07f), WalletSurface)
+                        } else {
+                            listOf(WalletColors.redAccent.copy(alpha = 0.26f), WalletColors.redAccent.copy(alpha = 0.06f), WalletSurface)
+                        }
+                    )
+                )
+                .border(1.dp, if (isIncome) WalletGreenAccent.copy(alpha = .28f) else WalletColors.redAccent.copy(alpha = .22f), RoundedCornerShape(13.dp)),
             contentAlignment = Alignment.Center
         ) {
             WalletIcon(
                 name = if (isIncome) "income" else categoryIconName(item.category),
-                color = if (isIncome) WalletGreen else WalletColors.red,
+                color = if (isIncome) WalletGreenAccent else WalletColors.redAccent,
                 size = 19.dp
             )
         }
@@ -596,19 +724,28 @@ fun AccountRow(
     onClick: () -> Unit = {}
 ) {
     val color = when (account.accent) {
-        AccountAccent.Green -> WalletGreen
-        AccountAccent.Purple -> WalletColors.purple
-        AccountAccent.Amber -> WalletColors.amber
+        AccountAccent.Green -> WalletGreenAccent
+        AccountAccent.Purple -> Color(0xFFB29ACB)
+        AccountAccent.Amber -> Color(0xFFC7A56F)
+        AccountAccent.Pink -> Color(0xFFD18FA2)
+        AccountAccent.Blue -> Color(0xFF86A9CE)
     }
 
     Card(
-        colors = CardDefaults.cardColors(WalletSurface),
+        colors = CardDefaults.cardColors(Color.Transparent),
         shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.walletGlassBorder(RoundedCornerShape(22.dp), color),
         onClick = onClick
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(color.copy(alpha = 0.22f), WalletSurface.copy(alpha = 0.92f), WalletSurface)
+                    )
+                )
                 .padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -616,7 +753,12 @@ fun AccountRow(
                 Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(color.copy(alpha = .15f)),
+                    .background(
+                        Brush.radialGradient(
+                            listOf(color.copy(alpha = 0.34f), color.copy(alpha = 0.08f), WalletSurface)
+                        )
+                    )
+                    .border(1.dp, color.copy(alpha = 0.28f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -689,11 +831,11 @@ fun Sparkline() {
 
         drawPath(
             path = path,
-            color = WalletGreen,
+            color = WalletGreenAccent,
             style = Stroke(4.dp.toPx(), cap = StrokeCap.Round)
         )
         drawCircle(
-            color = WalletGreen,
+            color = WalletGreenAccent,
             radius = 5.dp.toPx(),
             center = Offset(size.width, size.height * points.last())
         )
