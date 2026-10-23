@@ -2,9 +2,10 @@
 <resources>
     <style name="Theme.WalletManager" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:statusBarColor">#17130F</item>
-        <item name="android:navigationBarColor">#2A2118</item>
-        <item name="android:windowSplashScreenBackground">#17130F</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/wallet_logo</item>
+        <item name="android:statusBarColor">#1F1E1E</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#121316</item>
+        <item name="android:windowSplashScreenBackground">#1F1E1E</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/wallet_launcher_mark</item>
     </style>
 </resources>
