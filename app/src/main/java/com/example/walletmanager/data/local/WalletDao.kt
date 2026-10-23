@@ -24,6 +24,7 @@ interface WalletDao {
     @Query("SELECT * FROM recurring_payments") suspend fun currentRecurringPayments(): List<RecurringPaymentEntity>
     @Query("SELECT * FROM transactions WHERE id = :id") suspend fun transaction(id: String): TransactionEntity?
     @Query("SELECT * FROM holdings WHERE recurringPaymentId = :paymentId LIMIT 1") suspend fun holdingForRecurringPayment(paymentId: String): HoldingEntity?
+    @Query("SELECT * FROM holdings WHERE id = :id") suspend fun holding(id: String): HoldingEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAccounts(items: List<AccountEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTransactions(items: List<TransactionEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertRecurringPayments(items: List<RecurringPaymentEntity>)
@@ -42,6 +43,8 @@ interface WalletDao {
     @Query("DELETE FROM transactions WHERE id = :id") suspend fun deleteTransaction(id: String)
     @Query("DELETE FROM recurring_payments WHERE id = :id") suspend fun deleteRecurringPayment(id: String)
     @Query("DELETE FROM holdings WHERE recurringPaymentId = :paymentId") suspend fun deleteRecurringPaymentHolding(paymentId: String)
+    @Query("DELETE FROM holdings WHERE id = :id") suspend fun deleteHolding(id: String)
+    @Query("UPDATE recurring_payments SET investmentHoldingId = NULL WHERE investmentHoldingId = :holdingId") suspend fun clearInvestmentHoldingReferences(holdingId: String)
     @Query("DELETE FROM transactions WHERE accountId = :accountId") suspend fun deleteAccountTransactions(accountId: String)
     @Query("DELETE FROM categories WHERE id = :id") suspend fun deleteCategory(id: String)
     @Query("DELETE FROM categories WHERE parentId = :parentId") suspend fun deleteSubcategories(parentId: String)

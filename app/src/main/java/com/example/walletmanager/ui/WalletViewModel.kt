@@ -99,8 +99,20 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         repository.wipeData()
     }
 
+    fun addSampleData() = launchAction {
+        val added = repository.addSampleData()
+        notify(
+            if (added) "Sample data added. Demo entries are labeled in the app."
+            else "Sample data is already loaded. Wipe data to reset it."
+        )
+    }
+
     fun addAccount(name: String, type: String) = launchAction {
         repository.addAccount(name, type)
+    }
+
+    fun addBrokeragePlatform(name: String, openingBalanceMinor: Long) = launchAction {
+        repository.addAccount(name, "Brokerage", openingBalanceMinor)
     }
 
     fun editAccount(account: Account) = launchAction {
@@ -149,9 +161,10 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         amountMinor: Long,
         sourceAccountId: String,
         destinationAccountId: String,
-        note: String
+        note: String,
+        feeMinor: Long
     ) = launchAction {
-        repository.transfer(title, amountMinor, sourceAccountId, destinationAccountId, note)
+        repository.transfer(title, amountMinor, sourceAccountId, destinationAccountId, note, feeMinor)
     }
 
     fun editTransaction(transaction: Transaction) = launchAction {
@@ -170,7 +183,9 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         accountId: String,
         category: String = "Bills",
         dueDay: Int = 5,
-        investmentType: InvestmentType = InvestmentType.MUTUAL_FUND
+        investmentType: InvestmentType = InvestmentType.MUTUAL_FUND,
+        investmentHoldingId: String? = null,
+        investmentPlatformAccountId: String? = null
     ) = launchAction {
         repository.addRecurringPayment(
             name,
@@ -180,7 +195,9 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
             category,
             dueDay,
             cashbackMinor,
-            investmentType
+            investmentType,
+            investmentHoldingId,
+            investmentPlatformAccountId
         )
     }
 
@@ -199,9 +216,10 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
     fun addHolding(
         name: String,
         type: InvestmentType,
-        investedMinor: Long
+        investedMinor: Long,
+        platformAccountId: String? = null
     ) = launchAction {
-        repository.addHolding(name, type, "", investedMinor, investedMinor)
+        repository.addHolding(name, type, "", investedMinor, investedMinor, platformAccountId)
     }
 
     fun addIpo(ipo: PendingIpo) = launchAction {
@@ -230,5 +248,9 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
 
     fun editHolding(holding: Holding) = launchAction {
         repository.editHolding(holding)
+    }
+
+    fun exitHolding(holdingId: String, proceedsMinor: Long, destinationAccountId: String) = launchAction {
+        repository.exitHolding(holdingId, proceedsMinor, destinationAccountId)
     }
 }

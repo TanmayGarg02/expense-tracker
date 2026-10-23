@@ -125,7 +125,9 @@ class WalletRepository(private val database: WalletDatabase) {
                     lastProcessedPeriod = it.lastProcessedPeriod,
                     cashbackMinor = it.cashbackMinor,
                     investmentType = runCatching { InvestmentType.valueOf(it.investmentType) }
-                        .getOrDefault(InvestmentType.MUTUAL_FUND)
+                        .getOrDefault(InvestmentType.MUTUAL_FUND),
+                    investmentHoldingId = it.investmentHoldingId,
+                    investmentPlatformAccountId = it.investmentPlatformAccountId
                 )
             },
             holdings = holdings.map {
@@ -136,7 +138,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     units = it.units,
                     valueMinor = it.valueMinor,
                     costMinor = it.costMinor,
-                    recurringPaymentId = it.recurringPaymentId
+                    recurringPaymentId = it.recurringPaymentId,
+                    platformAccountId = it.platformAccountId
                 )
             },
             pendingIpos = ipos.map {
@@ -377,16 +380,21 @@ class WalletRepository(private val database: WalletDatabase) {
         )
     }
 
-    suspend fun addAccount(name: String, type: String) {
+    suspend fun addAccount(name: String, type: String, openingBalanceMinor: Long = 0) {
         if (name.isBlank()) return
+
+        val existingAccounts = dao.accounts().first()
+        val usedAccents = existingAccounts.mapNotNull { runCatching { AccountAccent.valueOf(it.accent) }.getOrNull() }.toSet()
+        val accent = AccountAccent.values().firstOrNull { it !in usedAccents }
+            ?: AccountAccent.values()[existingAccounts.size % AccountAccent.values().size]
 
         dao.insertAccount(
             AccountEntity(
                 id = "account-${System.currentTimeMillis()}",
                 name = name,
                 type = type,
-                balanceMinor = 0,
-                accent = AccountAccent.Green.name
+                balanceMinor = openingBalanceMinor.coerceAtLeast(0),
+                accent = accent.name
             )
         )
     }
@@ -505,10 +513,12 @@ class WalletRepository(private val database: WalletDatabase) {
         amountMinor: Long,
         sourceAccountId: String,
         destinationAccountId: String,
-        note: String
+        note: String,
+        feeMinor: Long = 0
     ) {
         if (
             amountMinor <= 0 ||
+            feeMinor < 0 ||
             sourceAccountId == destinationAccountId ||
             dao.account(sourceAccountId) == null ||
             dao.account(destinationAccountId) == null
@@ -544,7 +554,24 @@ class WalletRepository(private val database: WalletDatabase) {
                     createdAt = timestamp
                 )
             )
+            if (feeMinor > 0) {
+                dao.insertTransaction(
+                    TransactionEntity(
+                        id = "transfer-fee-$timestamp",
+                        title = "Transfer fee · ${title.ifBlank { "Transfer" }}",
+                        category = "Transfer fee",
+                        amountMinor = feeMinor,
+                        kind = TransactionKind.EXPENSE.name,
+                        accountId = sourceAccountId,
+                        date = "Just now",
+                        weekOfMonth = 4,
+                        note = note,
+                        createdAt = timestamp + 1
+                    )
+                )
+            }
             dao.adjustBalance(sourceAccountId, -amountMinor)
+            if (feeMinor > 0) dao.adjustBalance(sourceAccountId, -feeMinor)
             dao.adjustBalance(destinationAccountId, amountMinor)
         }
     }
@@ -633,11 +660,26 @@ class WalletRepository(private val database: WalletDatabase) {
         category: String,
         dueDay: Int,
         cashbackMinor: Long,
-        investmentType: InvestmentType
+        investmentType: InvestmentType,
+        investmentHoldingId: String? = null,
+        investmentPlatformAccountId: String? = null
     ) {
         if (name.isBlank() || amountMinor <= 0 || dao.account(accountId) == null) return
 
         val paymentId = "p${System.currentTimeMillis()}"
+        val linkedHolding = investmentHoldingId
+            ?.takeIf { category == "Investments" }
+            ?.let { dao.holding(it) }
+            ?.takeIf {
+                runCatching { InvestmentType.valueOf(it.type) }.getOrDefault(InvestmentType.MUTUAL_FUND)
+                    .displayCategory() == investmentType.displayCategory()
+            }
+        val linkedHoldingId = linkedHolding?.id
+        val platformAccountId = linkedHolding?.platformAccountId
+            ?: investmentPlatformAccountId?.takeIf { it == "other" || dao.account(it)?.type == "Brokerage" }
+        if (linkedHolding != null && linkedHolding.platformAccountId == null && platformAccountId != null) {
+            dao.insertHolding(linkedHolding.copy(platformAccountId = platformAccountId))
+        }
         dao.insertRecurringPayment(
             RecurringPaymentEntity(
                 id = paymentId,
@@ -651,10 +693,12 @@ class WalletRepository(private val database: WalletDatabase) {
                 dueDay = dueDay,
                 lastProcessedPeriod = "",
                 cashbackMinor = cashbackMinor.coerceAtLeast(0),
-                investmentType = investmentType.name
+                investmentType = investmentType.name,
+                investmentHoldingId = linkedHoldingId,
+                investmentPlatformAccountId = platformAccountId
             )
         )
-        if (category == "Investments") {
+        if (category == "Investments" && linkedHoldingId == null) {
             dao.insertHolding(
                 HoldingEntity(
                     id = "sip-$paymentId",
@@ -663,7 +707,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     units = "Ongoing SIP",
                     valueMinor = 0,
                     costMinor = 0,
-                    recurringPaymentId = paymentId
+                    recurringPaymentId = paymentId,
+                    platformAccountId = platformAccountId
                 )
             )
         }
@@ -671,6 +716,20 @@ class WalletRepository(private val database: WalletDatabase) {
 
     suspend fun editRecurringPayment(p: RecurringPayment) {
         if (p.name.isBlank() || p.amountMinor <= 0 || dao.account(p.accountId) == null) return
+
+        val targetHolding = p.investmentHoldingId
+            ?.takeIf { p.category == "Investments" }
+            ?.let { dao.holding(it) }
+            ?.takeIf {
+                runCatching { InvestmentType.valueOf(it.type) }.getOrDefault(InvestmentType.MUTUAL_FUND)
+                    .displayCategory() == p.investmentType.displayCategory()
+            }
+        val validPlatformAccountId = targetHolding?.platformAccountId
+            ?: p.investmentPlatformAccountId?.takeIf { it == "other" || dao.account(it)?.type == "Brokerage" }
+            ?: p.accountId.takeIf { dao.account(it)?.type == "Brokerage" }
+        if (targetHolding != null && targetHolding.platformAccountId == null && validPlatformAccountId != null) {
+            dao.insertHolding(targetHolding.copy(platformAccountId = validPlatformAccountId))
+        }
 
         dao.insertRecurringPayment(
             RecurringPaymentEntity(
@@ -685,21 +744,37 @@ class WalletRepository(private val database: WalletDatabase) {
                 p.dueDay,
                 p.lastProcessedPeriod,
                 p.cashbackMinor,
-                p.investmentType.name
+                p.investmentType.name,
+                targetHolding?.id,
+                validPlatformAccountId.takeIf { p.category == "Investments" }
             )
         )
-        if (p.category == "Investments" && dao.holdingForRecurringPayment(p.id) == null) {
-            dao.insertHolding(
-                HoldingEntity(
-                    id = "sip-${p.id}",
-                    name = p.name,
-                    type = InvestmentType.SIP.name,
-                    units = "Ongoing SIP",
-                    valueMinor = 0,
-                    costMinor = 0,
-                    recurringPaymentId = p.id
+        if (p.category == "Investments") {
+            if (targetHolding != null) {
+                dao.deleteRecurringPaymentHolding(p.id)
+            } else {
+                val linkedHolding = dao.holdingForRecurringPayment(p.id)
+                dao.insertHolding(
+                    linkedHolding?.copy(
+                        name = p.name,
+                        type = p.investmentType.name,
+                        platformAccountId = validPlatformAccountId
+                            ?: p.accountId.takeIf { dao.account(it)?.type == "Brokerage" }
+                    )
+                        ?: HoldingEntity(
+                            id = "sip-${p.id}",
+                            name = p.name,
+                            type = p.investmentType.name,
+                            units = "Ongoing SIP",
+                            valueMinor = 0,
+                            costMinor = 0,
+                            recurringPaymentId = p.id,
+                            platformAccountId = validPlatformAccountId
+                        )
                 )
-            )
+            }
+        } else {
+            dao.deleteRecurringPaymentHolding(p.id)
         }
     }
 
@@ -715,7 +790,8 @@ class WalletRepository(private val database: WalletDatabase) {
         type: InvestmentType,
         units: String,
         valueMinor: Long,
-        costMinor: Long
+        costMinor: Long,
+        platformAccountId: String? = null
     ) {
         if (name.isNotBlank() && valueMinor > 0) {
             dao.insertHolding(
@@ -726,7 +802,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     units = units,
                     valueMinor = valueMinor,
                     costMinor = costMinor,
-                    recurringPaymentId = null
+                    recurringPaymentId = null,
+                    platformAccountId = platformAccountId
                 )
             )
         }
@@ -813,9 +890,38 @@ class WalletRepository(private val database: WalletDatabase) {
             h.units,
             h.valueMinor,
             h.costMinor,
-            h.recurringPaymentId
+            h.recurringPaymentId,
+            h.platformAccountId
         )
     )
+
+    suspend fun exitHolding(holdingId: String, proceedsMinor: Long, destinationAccountId: String) {
+        val holding = dao.holding(holdingId) ?: return
+        if (proceedsMinor < 0 || dao.account(destinationAccountId) == null) return
+
+        val timestamp = System.currentTimeMillis()
+        database.withTransaction {
+            dao.clearInvestmentHoldingReferences(holdingId)
+            if (proceedsMinor > 0) {
+                dao.insertTransaction(
+                    TransactionEntity(
+                        id = "investment-sale-$holdingId-$timestamp",
+                        title = "Sold ${holding.name}",
+                        category = "Investment sale",
+                        amountMinor = proceedsMinor,
+                        kind = TransactionKind.INCOME.name,
+                        accountId = destinationAccountId,
+                        date = "Just now",
+                        weekOfMonth = 4,
+                        note = "Investment exit",
+                        createdAt = timestamp
+                    )
+                )
+                dao.adjustBalance(destinationAccountId, proceedsMinor)
+            }
+            dao.deleteHolding(holdingId)
+        }
+    }
 
     suspend fun processDuePayments(today: LocalDate) {
         val due = dao.currentRecurringPayments().filter {
@@ -876,7 +982,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     dao.adjustBalance(p.accountId, p.cashbackMinor)
                 }
                 if (p.category == "Investments") {
-                    val holding = dao.holdingForRecurringPayment(p.id)
+                    val holding = p.investmentHoldingId?.let { dao.holding(it) }
+                        ?: dao.holdingForRecurringPayment(p.id)
                     dao.insertHolding(
                         holding?.copy(
                             type = runCatching { InvestmentType.valueOf(p.investmentType) }
@@ -891,7 +998,8 @@ class WalletRepository(private val database: WalletDatabase) {
                             units = "Ongoing SIP",
                             valueMinor = p.amountMinor,
                             costMinor = p.amountMinor,
-                            recurringPaymentId = p.id
+                            recurringPaymentId = p.id,
+                            platformAccountId = p.investmentPlatformAccountId
                         )
                     )
                 }
@@ -901,7 +1009,7 @@ class WalletRepository(private val database: WalletDatabase) {
     }
 
     fun exportCsv(state: WalletUiState): String {
-        val out = StringBuilder("record_type,id,name,kind,amount_minor,account_id,account_type,category,date,frequency,next_due,investment_type,units,current_value_minor,cost_minor\n")
+        val out = StringBuilder("record_type,id,name,kind,amount_minor,account_id,account_type,category,date,frequency,next_due,investment_type,units,current_value_minor,cost_minor,platform_account_id,investment_holding_id,investment_platform_account_id\n")
 
         state.accounts.forEach {
             out.appendLine(csv(listOf("ACCOUNT", it.id, it.name, "", it.balanceMinor.toString(), "", it.type, "", "", "", "", "", "", "", "")))
@@ -910,10 +1018,10 @@ class WalletRepository(private val database: WalletDatabase) {
             out.appendLine(csv(listOf("TRANSACTION", it.id, it.title, it.kind.name, it.amountMinor.toString(), it.accountId, "", it.category, it.date, "", "", "", "", "", "")))
         }
         state.recurringPayments.forEach {
-            out.appendLine(csv(listOf("RECURRING", it.id, it.name, "", it.amountMinor.toString(), it.accountId, "", it.category, "", it.frequency, it.due, "", "", "", "")))
+            out.appendLine(csv(listOf("RECURRING", it.id, it.name, "", it.amountMinor.toString(), it.accountId, "", it.category, "", it.frequency, it.due, "", "", "", "", "", it.investmentHoldingId.orEmpty(), it.investmentPlatformAccountId.orEmpty())))
         }
         state.holdings.forEach {
-            out.appendLine(csv(listOf("INVESTMENT", it.id, it.name, "", "", "", "", "", "", "", "", it.type.name, it.units, it.valueMinor.toString(), it.costMinor.toString())))
+            out.appendLine(csv(listOf("INVESTMENT", it.id, it.name, "", "", "", "", "", "", "", "", it.type.name, it.units, it.valueMinor.toString(), it.costMinor.toString(), it.platformAccountId.orEmpty(), "", "")))
         }
 
         return out.toString()
@@ -966,7 +1074,9 @@ class WalletRepository(private val database: WalletDatabase) {
                     value(it, "category").ifBlank { "Bills" },
                     true,
                     5,
-                    ""
+                    "",
+                    investmentHoldingId = value(it, "investment_holding_id").ifBlank { null },
+                    investmentPlatformAccountId = value(it, "investment_platform_account_id").ifBlank { null }
                 )
             }
         val holdings = data
@@ -979,7 +1089,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     value(it, "units"),
                     value(it, "current_value_minor").toLongOrNull() ?: 0,
                     value(it, "cost_minor").toLongOrNull() ?: 0,
-                    null
+                    null,
+                    value(it, "platform_account_id").ifBlank { null }
                 )
             }
 

@@ -25,11 +25,22 @@ data class RecurringPaymentEntity(
     val dueDay: Int,
     val lastProcessedPeriod: String,
     val cashbackMinor: Long = 0,
-    val investmentType: String = "MUTUAL_FUND"
+    val investmentType: String = "MUTUAL_FUND",
+    val investmentHoldingId: String? = null,
+    val investmentPlatformAccountId: String? = null
 )
 
 @Entity(tableName = "holdings")
-data class HoldingEntity(@PrimaryKey val id: String, val name: String, val type: String, val units: String, val valueMinor: Long, val costMinor: Long, val recurringPaymentId: String?)
+data class HoldingEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val type: String,
+    val units: String,
+    val valueMinor: Long,
+    val costMinor: Long,
+    val recurringPaymentId: String?,
+    val platformAccountId: String? = null
+)
 
 @Entity(tableName = "ipos")
 data class IpoEntity(

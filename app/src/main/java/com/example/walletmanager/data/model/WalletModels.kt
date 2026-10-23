@@ -19,10 +19,14 @@ enum class TransactionKind {
     EXPENSE
 }
 
+const val OTHER_INVESTMENT_PLATFORM_ID = "other"
+
 enum class AccountAccent {
     Green,
     Purple,
-    Amber
+    Amber,
+    Pink,
+    Blue
 }
 
 enum class InvestmentType {
@@ -90,7 +94,9 @@ data class RecurringPayment(
     val dueDay: Int = 5,
     val lastProcessedPeriod: String = "",
     val cashbackMinor: Long = 0,
-    val investmentType: InvestmentType = InvestmentType.MUTUAL_FUND
+    val investmentType: InvestmentType = InvestmentType.MUTUAL_FUND,
+    val investmentHoldingId: String? = null,
+    val investmentPlatformAccountId: String? = null
 )
 
 data class Holding(
@@ -100,7 +106,8 @@ data class Holding(
     val units: String,
     val valueMinor: Long,
     val costMinor: Long,
-    val recurringPaymentId: String? = null
+    val recurringPaymentId: String? = null,
+    val platformAccountId: String? = null
 )
 
 data class PendingIpo(

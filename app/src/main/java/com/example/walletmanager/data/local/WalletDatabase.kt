@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SettingsEntity::class,
         CategoryEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class WalletDatabase : RoomDatabase() {
@@ -43,87 +43,74 @@ abstract class WalletDatabase : RoomDatabase() {
                 MIGRATION_6_7,
                 MIGRATION_7_8,
                 MIGRATION_8_9,
-                MIGRATION_9_10
-            ).fallbackToDestructiveMigration().build().also {
+                MIGRATION_9_10,
+                MIGRATION_10_11
+            ).build().also {
                 instance = it
             }
         }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE transactions ADD COLUMN note TEXT NOT NULL DEFAULT ''"
-                )
-                database.execSQL(
-                    "CREATE TABLE IF NOT EXISTS categories (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, parentId TEXT)"
-                )
+                database.execSQL("ALTER TABLE transactions ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+                database.execSQL("CREATE TABLE IF NOT EXISTS categories (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, parentId TEXT)")
             }
         }
 
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE transactions ADD COLUMN cashbackMinor INTEGER NOT NULL DEFAULT 0"
-                )
+                database.execSQL("ALTER TABLE transactions ADD COLUMN cashbackMinor INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE recurring_payments ADD COLUMN cashbackMinor INTEGER NOT NULL DEFAULT 0"
-                )
+                database.execSQL("ALTER TABLE recurring_payments ADD COLUMN cashbackMinor INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE transactions ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0"
-                )
+                database.execSQL("ALTER TABLE transactions ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE settings ADD COLUMN profileName TEXT NOT NULL DEFAULT 'Alex'"
-                )
-                database.execSQL(
-                    "ALTER TABLE settings ADD COLUMN profileImageUri TEXT NOT NULL DEFAULT ''"
-                )
+                database.execSQL("ALTER TABLE settings ADD COLUMN profileName TEXT NOT NULL DEFAULT 'Alex'")
+                database.execSQL("ALTER TABLE settings ADD COLUMN profileImageUri TEXT NOT NULL DEFAULT ''")
             }
         }
 
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "CREATE TABLE IF NOT EXISTS ipos (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, amountMinor INTEGER NOT NULL, allotmentDate TEXT NOT NULL, allotmentDateMillis INTEGER NOT NULL)"
-                )
+                database.execSQL("CREATE TABLE IF NOT EXISTS ipos (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, amountMinor INTEGER NOT NULL, allotmentDate TEXT NOT NULL, allotmentDateMillis INTEGER NOT NULL)")
             }
         }
 
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE recurring_payments ADD COLUMN investmentType TEXT NOT NULL DEFAULT 'MUTUAL_FUND'"
-                )
+                database.execSQL("ALTER TABLE recurring_payments ADD COLUMN investmentType TEXT NOT NULL DEFAULT 'MUTUAL_FUND'")
             }
         }
 
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "CREATE TABLE IF NOT EXISTS fixed_deposits (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, principalMinor INTEGER NOT NULL, interestRateBps INTEGER NOT NULL, maturityDate TEXT NOT NULL, maturityDateMillis INTEGER NOT NULL, maturityAmountMinor INTEGER NOT NULL)"
-                )
+                database.execSQL("CREATE TABLE IF NOT EXISTS fixed_deposits (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, principalMinor INTEGER NOT NULL, interestRateBps INTEGER NOT NULL, maturityDate TEXT NOT NULL, maturityDateMillis INTEGER NOT NULL, maturityAmountMinor INTEGER NOT NULL)")
             }
         }
 
         val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL(
-                    "ALTER TABLE fixed_deposits ADD COLUMN accountId TEXT NOT NULL DEFAULT ''"
-                )
+                database.execSQL("ALTER TABLE fixed_deposits ADD COLUMN accountId TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE recurring_payments ADD COLUMN investmentHoldingId TEXT")
+                database.execSQL("ALTER TABLE recurring_payments ADD COLUMN investmentPlatformAccountId TEXT")
+                database.execSQL("ALTER TABLE holdings ADD COLUMN platformAccountId TEXT")
             }
         }
     }
