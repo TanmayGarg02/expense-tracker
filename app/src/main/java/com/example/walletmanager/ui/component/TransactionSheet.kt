@@ -19,12 +19,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -36,8 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -47,7 +46,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -82,12 +80,14 @@ import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.ui.theme.WalletBackground
-import com.example.walletmanager.ui.theme.WalletGreen
-import com.example.walletmanager.ui.theme.WalletRed
+import com.example.walletmanager.ui.theme.WalletGreenAccent
+import com.example.walletmanager.ui.theme.WalletRedAccent
 import com.example.walletmanager.ui.theme.WalletSurface
 import com.example.walletmanager.ui.theme.WalletText
 import com.example.walletmanager.ui.theme.WalletMuted
 import com.example.walletmanager.ui.theme.WalletAmber
+import com.example.walletmanager.ui.theme.WalletBeige
+import com.example.walletmanager.ui.theme.WalletSurfaceVariant
 import com.example.walletmanager.ui.theme.WalletDivider
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -98,12 +98,12 @@ import java.time.format.DateTimeFormatter
 
 private val ScreenBg = WalletBackground
 private val DarkCardBg = WalletSurface
-private val RedAccent = WalletRed
-private val GreenAccent = WalletGreen
+private val RedAccent = WalletRedAccent
+private val GreenAccent = WalletGreenAccent
 private val AmberAccent = WalletAmber
 private val MutedText = WalletMuted
 private val LineColor = WalletDivider
-private val CategoryPanelHeaderBg = Color(0xFF352B24)
+private val CategoryPanelHeaderBg = WalletSurfaceVariant
 private val CategoryPanelBg = WalletSurface
 private val CategoryPanelLeftBg = WalletBackground
 private val CreamText = WalletText
@@ -117,7 +117,7 @@ fun TransactionSheet(
     initialTransfer: Boolean = false,
     dismiss: () -> Unit,
     onSave: (title: String, amountMinor: Long, kind: TransactionKind, category: String, accountId: String, note: String, cashbackMinor: Long) -> Unit,
-    onTransfer: ((title: String, amountMinor: Long, sourceAccountId: String, destinationAccountId: String, note: String) -> Unit)? = null,
+    onTransfer: ((title: String, amountMinor: Long, sourceAccountId: String, destinationAccountId: String, note: String, feeMinor: Long) -> Unit)? = null,
     onDelete: ((Transaction) -> Unit)? = null,
     onAddCategory: ((name: String, parentId: String?) -> Unit)? = null,
     onEditCategory: ((Category) -> Unit)? = null,
@@ -145,6 +145,7 @@ fun TransactionSheet(
     var destinationAccountId by rememberSaveable {
         mutableStateOf(state.accounts.getOrNull(1)?.id.orEmpty())
     }
+    var transferFeeText by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf(initialTransaction?.note.orEmpty()) }
     var cashbackText by rememberSaveable {
         mutableStateOf(
@@ -171,6 +172,8 @@ fun TransactionSheet(
     var addCategoryDialog by rememberSaveable { mutableStateOf(false) }
     var categoryManager by rememberSaveable { mutableStateOf(false) }
     var categoryToEdit by remember { mutableStateOf<Category?>(null) }
+    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
+    var confirmTransactionDelete by rememberSaveable { mutableStateOf(false) }
     var activePanel by rememberSaveable { mutableStateOf("category") }
     var transferMode by rememberSaveable { mutableStateOf(initialTransfer) }
 
@@ -191,12 +194,11 @@ fun TransactionSheet(
     val coroutineScope = rememberCoroutineScope()
     val saveShake = remember { Animatable(0f) }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         sheetState = sheetState,
-        containerColor = ScreenBg,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        containerColor = ScreenBg
     ) {
         val categoryPanelExpanded = showCategoryPanel && activePanel == "category"
         Box(
@@ -239,11 +241,8 @@ fun TransactionSheet(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isEditing && onDelete != null && initialTransaction != null) {
-                        IconButton(onClick = {
-                            onDelete(initialTransaction)
-                            dismiss()
-                        }) {
+                    if (isEditing && onDelete != null) {
+                        IconButton(onClick = { confirmTransactionDelete = true }) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Delete",
@@ -269,6 +268,7 @@ fun TransactionSheet(
                     onClick = {
                         kind = TransactionKind.INCOME
                         transferMode = false
+                        transferFeeText = ""
                         selectedParentId = "income"
                         selectedCategoryName = "Income · Salary"
                     },
@@ -282,6 +282,7 @@ fun TransactionSheet(
                     onClick = {
                         kind = TransactionKind.EXPENSE
                         transferMode = false
+                        transferFeeText = ""
                         selectedParentId = "food"
                         selectedCategoryName = "Food · Lunch"
                     },
@@ -295,11 +296,14 @@ fun TransactionSheet(
                     onClick = {
                         kind = TransactionKind.EXPENSE
                         transferMode = true
+                        transferFeeText = ""
                         selectedCategoryName = "Transfer"
                     },
                     modifier = Modifier.weight(1f)
                 )
             }
+
+            Spacer(Modifier.height(12.dp))
 
             // Form Rows (Date, Amount, Category, Account, Note)
             Column(
@@ -538,6 +542,45 @@ fun TransactionSheet(
                             }
                         }
                     }
+                    HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Fee (optional)",
+                            color = MutedText,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.width(72.dp)
+                        )
+                        OutlinedTextField(
+                            value = transferFeeText,
+                            onValueChange = { transferFeeText = it },
+                            placeholder = {
+                                Text(
+                                    "0",
+                                    color = MutedText.copy(alpha = 0.5f),
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp
+                                )
+                            },
+                            prefix = { Text("${state.baseCurrency.symbol} ", fontSize = 13.sp) },
+                            singleLine = true,
+                            textStyle = compactInputStyle,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = activeColor,
+                                unfocusedBorderColor = LineColor,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedTextColor = CreamText,
+                                unfocusedTextColor = CreamText
+                            ),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        )
+                    }
                 }
 
                 // Note Row
@@ -748,7 +791,7 @@ fun TransactionSheet(
                                             )
                                         }
                                         Icon(
-                                            imageVector = Icons.Default.KeyboardArrowRight,
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                             contentDescription = null,
                                             tint = MutedText,
                                             modifier = Modifier.size(16.dp)
@@ -845,8 +888,11 @@ fun TransactionSheet(
                 onClick = {
                     val amountMinor = ((amountText.toDoubleOrNull() ?: 0.0) * 100).toLong()
                     val cashbackMinor = ((cashbackText.toDoubleOrNull() ?: 0.0) * 100).toLong()
+                    val feeAmount = transferFeeText.toDoubleOrNull()
+                    val feeMinor = ((feeAmount ?: 0.0) * 100).toLong()
                     val validationMessage = when {
                         amountMinor <= 0 -> "Enter an amount greater than zero"
+                        transferMode && transferFeeText.isNotBlank() && (feeAmount == null || feeAmount < 0) -> "Enter a valid transfer fee"
                         state.accounts.none { it.id == accountId } -> "Choose an account"
                         !transferMode && selectedCategoryName.isBlank() -> "Choose a category"
                         transferMode && state.accounts.none { it.id == destinationAccountId && it.id != accountId } ->
@@ -870,7 +916,7 @@ fun TransactionSheet(
                     }
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     if (transferMode) {
-                        onTransfer?.invoke(title, amountMinor, accountId, destinationAccountId, note)
+                        onTransfer?.invoke(title, amountMinor, accountId, destinationAccountId, note, feeMinor)
                     } else {
                         onSave(
                             title.ifBlank { selectedCategoryName },
@@ -889,7 +935,7 @@ fun TransactionSheet(
                     .padding(16.dp)
                     .height(46.dp)
                     .graphicsLayer { translationX = saveShake.value },
-                colors = ButtonDefaults.buttonColors(containerColor = activeColor),
+                colors = ButtonDefaults.buttonColors(containerColor = WalletBeige),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Text(
@@ -911,6 +957,19 @@ fun TransactionSheet(
         }
     }
 
+    if (confirmTransactionDelete && initialTransaction != null && onDelete != null) {
+        WalletConfirmDialog(
+            title = "Delete transaction?",
+            message = "${initialTransaction.title} will be removed.",
+            onDismiss = { confirmTransactionDelete = false },
+            onConfirm = {
+                onDelete(initialTransaction)
+                confirmTransactionDelete = false
+                dismiss()
+            }
+        )
+    }
+
     if (categoryManager && onAddCategory != null) {
         CategoryManagerSheet(
             categories = state.categories,
@@ -923,7 +982,19 @@ fun TransactionSheet(
                 categoryManager = false
                 categoryToEdit = it
             },
-            delete = { onDeleteCategory?.invoke(it) }
+            delete = { categoryToDelete = it }
+        )
+    }
+
+    categoryToDelete?.let { category ->
+        WalletConfirmDialog(
+            title = "Delete category?",
+            message = "${category.name} will be removed.",
+            onDismiss = { categoryToDelete = null },
+            onConfirm = {
+                onDeleteCategory?.invoke(category)
+                categoryToDelete = null
+            }
         )
     }
 
@@ -1018,22 +1089,27 @@ private fun NumberPad(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         rows.forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                Modifier.widthIn(max = 288.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 row.forEach { key ->
                     if (key.isEmpty()) {
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.width(64.dp).height(48.dp))
                     } else {
                         val isDone = key == "Done"
                         Box(
                             modifier = Modifier
-                                .weight(if (isDone) 1.2f else 1f)
-                                .height(39.dp)
+                                .width(if (isDone) 72.dp else 64.dp)
+                                .height(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isDone) GreenAccent.copy(alpha = 0.9f) else DarkCardBg)
+                                .background(if (isDone) WalletBeige else DarkCardBg)
                                 .clickable {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     when (key) {
@@ -1050,7 +1126,7 @@ private fun NumberPad(
                             Text(
                                 text = key,
                                 color = if (isDone) WalletColors.ink else CreamText,
-                                fontSize = if (key.length > 1) 13.sp else 16.sp,
+                                fontSize = if (key.length > 1) 13.sp else 18.sp,
                                 fontWeight = if (isDone) FontWeight.Bold else FontWeight.Medium
                             )
                         }
@@ -1185,7 +1261,7 @@ private fun AddCategorySheet(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = WalletBeige),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Save Category", color = WalletColors.ink, fontWeight = FontWeight.Bold)
@@ -1224,7 +1300,7 @@ private fun CategoryManagerSheet(
             Button(
                 onClick = add,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = WalletBeige),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("+ Add category or subcategory", color = WalletColors.ink, fontWeight = FontWeight.Bold)
