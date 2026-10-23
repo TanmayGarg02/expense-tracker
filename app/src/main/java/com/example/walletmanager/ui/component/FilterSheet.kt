@@ -10,14 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -29,8 +27,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,21 +43,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.walletmanager.data.model.Account
-import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.TransactionKind
 import com.example.walletmanager.data.model.WalletUiState
+import com.example.walletmanager.ui.theme.WalletBackground
+import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletRed
+import com.example.walletmanager.ui.theme.WalletSurface
 import java.util.Locale
 import java.time.LocalDate
 import java.time.YearMonth
 
-private val HeaderBg = Color(0xFF2B3046)
-private val TopDonutBg = Color(0xFF1E202B)
-private val FilterContentBg = Color(0xFF181A22)
-private val IncomeBlue = Color(0xFF2196F3)
-private val ExpenseRed = Color(0xFFE53935)
-private val TabUnderlineColor = Color(0xFFEF5350)
-private val LineColor = Color(0xFF2C2F3D)
-private val TextMuted = Color(0xFF9E9E9E)
+private val HeaderBg = WalletSurface
+private val TopDonutBg = WalletBackground
+private val FilterContentBg = WalletBackground
+private val IncomeGreen = WalletGreen
+private val ExpenseRed = WalletRed
+private val LineColor = WalletColors.divider
+private val TextMuted = WalletColors.muted
+private val TextCream = WalletColors.cream
 
 enum class FilterTab {
     INCOME,
@@ -116,13 +115,12 @@ fun FilterSheet(
     } else if (totalExpense > 0) 100 else 0
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
         sheetState = sheetState,
-        containerColor = FilterContentBg,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        containerColor = FilterContentBg
     ) {
         Column(
             modifier = Modifier
@@ -151,7 +149,7 @@ fun FilterSheet(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                 contentDescription = "Previous Month",
-                                tint = Color.White
+                                tint = TextCream
                             )
                         }
                         Spacer(Modifier.width(6.dp))
@@ -159,7 +157,7 @@ fun FilterSheet(
                             text = selectedMonth.month.name
                                 .lowercase(Locale.getDefault())
                                 .replaceFirstChar { it.uppercase() } + " ${selectedMonth.year}",
-                            color = Color.White,
+                            color = TextCream,
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp
                         )
@@ -172,7 +170,7 @@ fun FilterSheet(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "Next Month",
-                                tint = Color.White
+                                tint = TextCream
                             )
                         }
                     }
@@ -181,7 +179,7 @@ fun FilterSheet(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = Color.White
+                            tint = TextCream
                         )
                     }
                 }
@@ -208,14 +206,14 @@ fun FilterSheet(
                     Text("Income", color = TextMuted, fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
                     DonutRing(
-                        color = IncomeBlue,
+                        color = IncomeGreen,
                         percentage = incomePercent,
                         text = "$incomePercent%"
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = formatMoney(totalIncome, state.balancesVisible, state.baseCurrency),
-                        color = Color.White,
+                        color = IncomeGreen,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
@@ -233,7 +231,7 @@ fun FilterSheet(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = formatMoney(totalExpense, state.balancesVisible, state.baseCurrency),
-                        color = Color.White,
+                        color = ExpenseRed,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
@@ -245,7 +243,7 @@ fun FilterSheet(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = (if (netTotal < 0) "- " else "") + formatMoney(Math.abs(netTotal), state.balancesVisible, state.baseCurrency),
-                        color = Color.White,
+                        color = if (netTotal >= 0) IncomeGreen else ExpenseRed,
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
@@ -261,18 +259,21 @@ fun FilterSheet(
                 FilterTabItem(
                     title = "INCOME",
                     isActive = activeTab == FilterTab.INCOME,
+                    activeColor = IncomeGreen,
                     onClick = { activeTab = FilterTab.INCOME },
                     modifier = Modifier.weight(1f)
                 )
                 FilterTabItem(
                     title = "EXPENSES",
                     isActive = activeTab == FilterTab.EXPENSES,
+                    activeColor = ExpenseRed,
                     onClick = { activeTab = FilterTab.EXPENSES },
                     modifier = Modifier.weight(1f)
                 )
                 FilterTabItem(
                     title = "ACCOUNT",
                     isActive = activeTab == FilterTab.ACCOUNT,
+                    activeColor = TextCream,
                     onClick = { activeTab = FilterTab.ACCOUNT },
                     modifier = Modifier.weight(1f)
                 )
@@ -298,15 +299,15 @@ fun FilterSheet(
                                 onApplyFilter("All")
                             }
                         },
-                        colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = IncomeBlue)
+                        colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = TextCream)
                     )
-                    Text("All", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("All", color = TextCream, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 }
 
                 if (activeTab == FilterTab.ACCOUNT) {
                     Column(horizontalAlignment = Alignment.End) {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text("Income", color = IncomeBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Income", color = IncomeGreen, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             Text("Expenses", color = ExpenseRed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -410,7 +411,7 @@ fun FilterSheet(
                                         },
                                         colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = ExpenseRed)
                                     )
-                                    Text(parent.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(parent.name, color = TextCream, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                                 }
                                 Text(
                                     text = formatMoney(parentTotal, state.balancesVisible, state.baseCurrency),
@@ -454,13 +455,13 @@ fun FilterSheet(
                                             onApplyFilter(catName)
                                             dismiss()
                                         },
-                                        colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = IncomeBlue)
+                                        colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = IncomeGreen)
                                     )
-                                    Text(catName, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(catName, color = TextCream, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                                 }
                                 Text(
                                     text = formatMoney(catTotal, state.balancesVisible, state.baseCurrency),
-                                    color = IncomeBlue,
+                                    color = IncomeGreen,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
@@ -503,7 +504,7 @@ private fun DonutRing(
         }
         Text(
             text = text,
-            color = Color.White,
+            color = TextCream,
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp
         )
@@ -514,6 +515,7 @@ private fun DonutRing(
 private fun FilterTabItem(
     title: String,
     isActive: Boolean,
+    activeColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -525,7 +527,7 @@ private fun FilterTabItem(
     ) {
         Text(
             text = title,
-            color = if (isActive) Color.White else TextMuted,
+            color = if (isActive) activeColor else TextMuted,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
             fontSize = 14.sp
         )
@@ -534,7 +536,7 @@ private fun FilterTabItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(2.5.dp)
-                .background(if (isActive) TabUnderlineColor else Color.Transparent)
+                .background(if (isActive) activeColor else Color.Transparent)
         )
     }
 }
@@ -560,12 +562,12 @@ private fun AccountFilterRow(
             Checkbox(
                 checked = isChecked,
                 onCheckedChange = { onToggle() },
-                colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = IncomeBlue)
+                colors = CheckboxDefaults.colors(uncheckedColor = TextMuted, checkedColor = TextCream)
             )
             Spacer(Modifier.width(4.dp))
             Text(
                 text = account.name,
-                color = Color.White,
+                color = TextCream,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -575,7 +577,7 @@ private fun AccountFilterRow(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     text = formatMoney(incomeMinor, state.balancesVisible, state.baseCurrency),
-                    color = IncomeBlue,
+                    color = IncomeGreen,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )

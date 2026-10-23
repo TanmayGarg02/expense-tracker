@@ -82,7 +82,14 @@ fun WeeklyScreen(state: WalletUiState, onBack: () -> Unit) {
 
 @Composable
 fun MonthlyScreen(state: WalletUiState, onBack: () -> Unit) {
-    ReportScreen("Monthly review", "October 2026", state.expenseMinor, state, onBack)
+    val currentMonth = YearMonth.now()
+    ReportScreen(
+        "Monthly review",
+        "${currentMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${currentMonth.year}",
+        state.expenseMinor,
+        state,
+        onBack
+    )
 }
 
 @Composable
@@ -150,9 +157,10 @@ private fun ReportScreen(
             "Expenses  ${formatMoney(amount, state.balancesVisible, state.baseCurrency)}",
             color = WalletColors.red
         )
+        val available = state.incomeMinor - amount
         Text(
-            "Available  ${formatMoney(state.incomeMinor - amount, state.balancesVisible, state.baseCurrency)}",
-            color = WalletColors.blue
+            "Available  ${formatMoney(available, state.balancesVisible, state.baseCurrency)}",
+            color = if (available >= 0) WalletGreen else WalletColors.red
         )
         Sparkline()
         Spacer(Modifier.height(70.dp))

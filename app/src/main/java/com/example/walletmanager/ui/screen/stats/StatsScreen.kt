@@ -3,10 +3,8 @@ package com.example.walletmanager.ui.screen.stats
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,14 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -32,13 +26,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.TransactionKind
@@ -49,11 +44,11 @@ import com.example.walletmanager.ui.component.SummaryCard
 import com.example.walletmanager.ui.component.TransactionRow
 import com.example.walletmanager.ui.component.WalletColors
 import com.example.walletmanager.ui.component.WalletPage
-import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.FilterSheet
 import com.example.walletmanager.ui.component.TransactionSheet
 import com.example.walletmanager.ui.component.formatMoney
-import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletGreenAccent
+import com.example.walletmanager.ui.theme.WalletRedAccent
 import com.example.walletmanager.ui.theme.WalletSurface
 
 @Composable
@@ -77,22 +72,22 @@ fun StatsScreen(
 
     WalletPage(PaddingValues()) {
         ScreenHeader("Statistics", "Monthly spending and cash flow")
-        FilterChip(
+        StatsControlButton(
+            label = if (filter == "All") "Filter" else filter,
             selected = filter != "All",
             onClick = { showFilter = true },
-            label = { Text(if (filter == "All") "Filter" else filter) }
         )
         PieChart(state, transactions)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
+            StatsControlButton(
+                label = "Weekly",
                 selected = period == "Weekly",
                 onClick = { period = "Weekly" },
-                label = { Text("Weekly") }
             )
-            FilterChip(
+            StatsControlButton(
+                label = "Monthly",
                 selected = period == "Monthly",
                 onClick = { period = "Monthly" },
-                label = { Text("Monthly") }
             )
         }
         ExpensePeriodGraph(transactions, period, state)
@@ -151,6 +146,25 @@ fun StatsScreen(
 }
 
 @Composable
+private fun StatsControlButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selected) WalletColors.cream else WalletSurface,
+            contentColor = if (selected) WalletColors.ink else WalletColors.cream
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+    ) {
+        Text(label)
+    }
+}
+
+@Composable
 private fun ExpensePeriodGraph(
     transactions: List<Transaction>,
     period: String,
@@ -190,7 +204,14 @@ private fun ExpensePeriodGraph(
     val maxAmount = amounts.maxOrNull()?.coerceAtLeast(1) ?: 1
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("${period} expenses", color = WalletColors.muted, fontSize = 13.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("$period expenses", color = WalletColors.muted, fontSize = 14.sp)
+            Text("AMOUNT · TX", color = WalletColors.muted, fontSize = 10.sp)
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -206,36 +227,56 @@ private fun ExpensePeriodGraph(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = if (period == "Monthly") {
-                            "${formatMoney(amount, state.balancesVisible, state.baseCurrency)}\n${entries[index].second} tx"
-                        } else {
-                            "${entries[index].second} tx"
-                        },
+                        text = compactAmount(amount, state),
                         color = WalletColors.cream,
-                        fontSize = 10.sp,
-                        lineHeight = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(WalletColors.red.copy(alpha = 0.25f))
-                            .padding(horizontal = 3.dp, vertical = 2.dp)
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
                     )
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
+                    val transactionCount = entries[index].second
+                    val barHeightDp = if (transactionCount > 0) {
+                        (100f * amount.toFloat() / maxAmount).coerceAtLeast(24f)
+                    } else 0f
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        contentAlignment = Alignment.BottomCenter
                     ) {
-                        val barHeight = size.height * amount.toFloat() / maxAmount
-                        drawRoundRect(
-                            color = WalletColors.red,
-                            topLeft = androidx.compose.ui.geometry.Offset(
-                                x = 0f,
-                                y = size.height - barHeight
-                            ),
-                            size = androidx.compose.ui.geometry.Size(size.width, barHeight),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
-                        )
+                        Canvas(Modifier.fillMaxSize()) {
+                            val barHeight = if (transactionCount > 0) {
+                                (size.height * amount.toFloat() / maxAmount).coerceAtLeast(24.dp.toPx())
+                            } else 0f
+                            drawRoundRect(
+                                brush = Brush.verticalGradient(
+                                    listOf(
+                                        WalletColors.redAccent.copy(alpha = 0.98f),
+                                        WalletColors.redAccent.copy(alpha = 0.58f)
+                                    )
+                                ),
+                                topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - barHeight),
+                                size = androidx.compose.ui.geometry.Size(size.width, barHeight),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
+                            )
+                        }
+                        if (transactionCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(barHeightDp.dp)
+                                    .align(Alignment.BottomCenter),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = transactionCount.toString(),
+                                    color = WalletColors.cream,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                     Text(labels[index], color = WalletColors.muted, fontSize = 11.sp)
                 }
@@ -244,9 +285,25 @@ private fun ExpensePeriodGraph(
         Text(
             "Total ${period.lowercase()} expenses: ${formatMoney(amounts.sum(), state.balancesVisible, state.baseCurrency)}",
             color = WalletColors.red,
-            fontSize = 12.sp
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
         )
     }
+}
+
+private fun compactAmount(amountMinor: Long, state: WalletUiState): String {
+    if (!state.balancesVisible) return "•••"
+    val amount = amountMinor / 100.0 * state.baseCurrency.inrRate
+    val absolute = kotlin.math.abs(amount)
+    val (scaled, suffix) = when {
+        absolute >= 10_000_000 -> amount / 10_000_000 to "Cr"
+        absolute >= 100_000 -> amount / 100_000 to "L"
+        absolute >= 1_000 -> amount / 1_000 to "K"
+        else -> amount to ""
+    }
+    val digits = if (suffix.isEmpty() || kotlin.math.abs(scaled) >= 10) "%.0f" else "%.1f"
+    val number = String.format(Locale.US, digits, scaled).removeSuffix(".0")
+    return "${state.baseCurrency.symbol}$number$suffix"
 }
 
 @Composable
@@ -260,13 +317,13 @@ private fun PieChart(
             .groupBy { it.category }
             .map { it.key to it.value.sumOf { item -> item.amountMinor } }
     }
-    val colors = remember {
+    val chartColors = remember {
         listOf(
-            WalletColors.red,
+            WalletRedAccent,
             WalletColors.amber,
             WalletColors.blue,
             WalletColors.purple,
-            WalletGreen
+            WalletGreenAccent
         )
     }
 
@@ -277,7 +334,7 @@ private fun PieChart(
 
             totals.forEachIndexed { index, item ->
                 val sweep = item.second.toFloat() / total * 360f
-                drawArc(colors[index % colors.size], start, sweep, true)
+                drawArc(chartColors[index % chartColors.size], start, sweep, true)
                 start += sweep
             }
         }
@@ -291,49 +348,6 @@ private fun PieChart(
                     color = colors[index % colors.size],
                     fontSize = 12.sp
                 )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FilterDialog(
-    categories: List<String>,
-    selected: String,
-    dismiss: () -> Unit,
-    select: (String) -> Unit
-) {
-    val options = remember(categories) {
-        (listOf("All", "INCOME", "EXPENSE") + categories).distinct()
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = dismiss,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-        dragHandle = { WalletSheetBackButton(dismiss) },
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = WalletSurface
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Text("Filter transactions")
-                options.forEach { option ->
-                    FilterChip(
-                        selected = selected == option,
-                        onClick = { select(option) },
-                        label = { Text(option) }
-                    )
-                }
-            TextButton(
-                onClick = dismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Done")
             }
         }
     }

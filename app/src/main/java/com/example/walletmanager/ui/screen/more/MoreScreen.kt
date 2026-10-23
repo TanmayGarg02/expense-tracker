@@ -19,7 +19,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,8 +40,10 @@ import com.example.walletmanager.ui.component.MoreRow
 import com.example.walletmanager.ui.component.ScreenHeader
 import com.example.walletmanager.ui.component.WalletColors
 import com.example.walletmanager.ui.component.WalletPage
+import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.theme.WalletGreen
+import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.theme.WalletSurface
 import java.io.File
 
@@ -56,6 +57,7 @@ fun MoreScreen(
     addReminder: (ReminderDraft) -> Unit,
     setProfile: (String, String) -> Unit,
     wipeData: () -> Unit,
+    addSampleData: () -> Unit,
     onBack: (() -> Unit)? = null,
     openProfileOnEntry: Boolean = false
 ) {
@@ -104,10 +106,26 @@ fun MoreScreen(
                     }
                     Button(
                         onClick = export,
-                        colors = ButtonDefaults.buttonColors(WalletGreen)
+                        colors = ButtonDefaults.buttonColors(WalletBeige)
                     ) {
                         Text("Export CSV", color = WalletColors.ink)
                     }
+                }
+                Text(
+                    if (state.accounts.any { it.id.startsWith("demo-account-") }) {
+                        "Demo dataset is loaded. Wipe data to reset it."
+                    } else {
+                        "Add demo accounts, transactions, transfers, plans and investments to explore the app."
+                    },
+                    color = WalletColors.muted
+                )
+                OutlinedButton(
+                    onClick = addSampleData,
+                    enabled = state.accounts.none { it.id.startsWith("demo-account-") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WalletColors.cream)
+                ) {
+                    Text("Add sample data")
                 }
                 state.message?.let {
                     Text(it, color = WalletGreen)
@@ -116,23 +134,22 @@ fun MoreScreen(
         }
 
         MoreRow(
-            glyph = "💱",
+            glyph = "currency",
             title = "Base currency",
             subtitle = "${state.baseCurrency.code} · INR is the default"
         ) {
             currencySheet = true
         }
-        MoreRow("👤", "Profile", "${state.profileName} · Add a profile picture") {
+        MoreRow("profile", "Profile", "${state.profileName} · Add a profile picture") {
             profileSheet = true
         }
-        MoreRow("📝", "Notes", "${state.notes.size} saved notes") {
+        MoreRow("notes", "Notes", "${state.notes.size} saved notes") {
             noteSheet = true
         }
-        MoreRow("🔔", "Important reminders", "Only notify me about things I choose") {
+        MoreRow("reminder", "Important reminders", "Only notify me about things I choose") {
             reminderSheet = true
         }
-        MoreRow("🎨", "Appearance", "Dark theme with green and red signals")
-        MoreRow("🗑️", "Wipe all data", "Delete all accounts, transactions and investments") {
+        MoreRow("delete", "Wipe all data", "Delete all accounts, transactions and investments") {
             wipeSheet = true
         }
 
@@ -206,7 +223,7 @@ private fun WipeDataSheet(
 ) {
     var confirmation by rememberSaveable { mutableStateOf("") }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -233,7 +250,7 @@ private fun WipeDataSheet(
                 onClick = wipe,
                 enabled = confirmation == "Delete",
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletColors.red)
+                colors = ButtonDefaults.buttonColors(WalletColors.redAccent)
             ) {
                 Text("Wipe data", fontWeight = FontWeight.Bold)
             }
@@ -255,7 +272,7 @@ private fun ProfileSheet(
 ) {
     var editedName by rememberSaveable(name) { mutableStateOf(name) }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -280,12 +297,12 @@ private fun ProfileSheet(
                 onClick = chooseImage,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (imageUri.isBlank()) "🖼️ Choose profile picture" else "🖼️ Change profile picture")
+                Text(if (imageUri.isBlank()) "Choose profile picture" else "Change profile picture")
             }
             Button(
                 onClick = { save(editedName, imageUri) },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(WalletBeige)
             ) {
                 Text("Save Profile", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
@@ -303,7 +320,7 @@ private fun CurrencySheet(
     dismiss: () -> Unit,
     select: (Currency) -> Unit
 ) {
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -341,7 +358,7 @@ private fun NoteSheet(
 ) {
     var value by rememberSaveable { mutableStateOf("") }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -368,7 +385,7 @@ private fun NoteSheet(
                     dismiss()
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(WalletBeige)
             ) {
                 Text("Save note", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
@@ -389,7 +406,7 @@ private fun ReminderSheet(
     var message by rememberSaveable { mutableStateOf("") }
     var minutes by rememberSaveable { mutableStateOf("60") }
 
-    ModalBottomSheet(
+    WalletModalBottomSheet(
         onDismissRequest = dismiss,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = { WalletSheetBackButton(dismiss) },
@@ -437,7 +454,7 @@ private fun ReminderSheet(
                     dismiss()
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(WalletGreen)
+                colors = ButtonDefaults.buttonColors(WalletBeige)
             ) {
                 Text("Set reminder", color = WalletColors.ink, fontWeight = FontWeight.Bold)
             }
