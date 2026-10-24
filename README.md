@@ -1,6 +1,6 @@
-# Wallet Manager
+# PocketWise
 
-Wallet Manager is an Android app for keeping everyday finances, recurring payments, and investments together. It is built with Kotlin and Jetpack Compose, and stores its data on the device with Room.
+PocketWise is an Android app for keeping everyday finances, recurring payments, and investments together. It is built with Kotlin and Jetpack Compose, and stores its data on the device with Room.
 
 ## What you can do
 

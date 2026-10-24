@@ -421,7 +421,7 @@ private fun ReminderSheet(
         ) {
             Text("Important reminder", fontWeight = FontWeight.Bold)
             Text(
-                "Use this for a real deadline, payment, or action. Wallet Manager will not send routine notifications.",
+                "Use this for a real deadline, payment, or action. PocketWise will not send routine notifications.",
                 color = WalletColors.muted
             )
             OutlinedTextField(
