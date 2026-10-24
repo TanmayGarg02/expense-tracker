@@ -345,7 +345,7 @@ private fun PieChart(
             totals.take(5).forEachIndexed { index, item ->
                 Text(
                     text = "● ${item.first}  ${formatMoney(item.second, state.balancesVisible, state.baseCurrency)}",
-                    color = colors[index % colors.size],
+                    color = chartColors[index % chartColors.size],
                     fontSize = 12.sp
                 )
             }

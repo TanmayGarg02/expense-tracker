@@ -4,7 +4,7 @@ Wallet Manager is an Android app for keeping everyday finances, recurring paymen
 
 ## What you can do
 
-- **Track money:** Record income, expenses, and transfers; assign categories and accounts; add notes and cashback; and review recent activity. Transfer fees are recorded as separate expenses.
+- **Track money:** Record income, expenses, and transfers; assign categories and accounts; add notes and cashback; and review recent activity. Editable starter categories include Food, Transport, Entertainment, Travel, Education, Subscriptions, Health, and Bills. Transfer fees are recorded as separate expenses.
 - **See your cash flow:** View account balances, monthly income and spending, and weekly or monthly spending summaries. Hide balances when you want more privacy.
 - **Organize accounts:** Track bank, cash, credit card, and brokerage accounts. Brokerage accounts show free funds and linked investments.
 - **Plan ahead:** Set up recurring payments and monthly mutual fund or index fund SIPs. A SIP can create a new holding or add contributions to an existing fund; plans can be paused or resumed.
@@ -39,6 +39,8 @@ The project uses Android Gradle Plugin 9.1.1, Kotlin 2.4.10, and Gradle Wrapper.
    ```
 
 To launch it from Android Studio, select the `app` run configuration and choose a device running Android 8.0 or newer.
+
+For personal use, the debug build is sufficient. Android Studio and Gradle sign it with the local debug key, so you do not need to create a release keystore. The APK is written to `app/build/outputs/apk/debug/app-debug.apk`; `./gradlew :app:installDebug` installs or updates it directly on the connected device.
 
 ## Project layout
 

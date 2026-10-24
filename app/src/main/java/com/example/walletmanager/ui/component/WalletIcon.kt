@@ -83,6 +83,8 @@ fun categoryIconName(name: String): String = when (name.substringBefore(" · ").
     "transport", "travel" -> "transport"
     "culture", "entertainment" -> "culture"
     "household" -> "home"
+    "education" -> "notes"
+    "subscriptions" -> "calendar"
     "shopping" -> "shopping"
     "health" -> "health"
     "bills" -> "bills"

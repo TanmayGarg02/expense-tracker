@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SettingsEntity::class,
         CategoryEntity::class
     ],
-    version = 11,
+    version = 14,
     exportSchema = false
 )
 abstract class WalletDatabase : RoomDatabase() {
@@ -44,7 +44,8 @@ abstract class WalletDatabase : RoomDatabase() {
                 MIGRATION_7_8,
                 MIGRATION_8_9,
                 MIGRATION_9_10,
-                MIGRATION_10_11
+                MIGRATION_10_14,
+                MIGRATION_13_14
             ).build().also {
                 instance = it
             }
@@ -106,12 +107,17 @@ abstract class WalletDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATION_10_11 = object : Migration(10, 11) {
+        val MIGRATION_10_14 = object : Migration(10, 14) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE recurring_payments ADD COLUMN investmentHoldingId TEXT")
                 database.execSQL("ALTER TABLE recurring_payments ADD COLUMN investmentPlatformAccountId TEXT")
                 database.execSQL("ALTER TABLE holdings ADD COLUMN platformAccountId TEXT")
             }
+        }
+
+        // Version 13 was used by pre-release builds with this same schema.
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) = Unit
         }
     }
 }

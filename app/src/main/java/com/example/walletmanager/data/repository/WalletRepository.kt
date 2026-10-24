@@ -199,9 +199,25 @@ class WalletRepository(private val database: WalletDatabase) {
                 CategoryEntity("transport-cab", "Taxi / Cab", "transport"),
                 CategoryEntity("transport-transit", "Public Transit", "transport"),
 
-                CategoryEntity("culture", "Culture"),
+                // Keep the existing IDs so installed databases retain their category links.
+                CategoryEntity("culture", "Entertainment"),
                 CategoryEntity("culture-movies", "Movies & Events", "culture"),
                 CategoryEntity("culture-books", "Books & Shows", "culture"),
+                CategoryEntity("entertainment-games", "Games & Hobbies", "culture"),
+                CategoryEntity("entertainment-streaming", "Streaming", "culture"),
+
+                CategoryEntity("travel", "Travel"),
+                CategoryEntity("travel-flights", "Flights", "travel"),
+                CategoryEntity("travel-stays", "Hotels & Stays", "travel"),
+                CategoryEntity("travel-trips", "Trips & Tours", "travel"),
+
+                CategoryEntity("education", "Education"),
+                CategoryEntity("education-tuition", "Tuition & Courses", "education"),
+                CategoryEntity("education-books", "Books & Supplies", "education"),
+
+                CategoryEntity("subscriptions", "Subscriptions"),
+                CategoryEntity("subscriptions-digital", "Digital Services", "subscriptions"),
+                CategoryEntity("subscriptions-memberships", "Memberships", "subscriptions"),
 
                 CategoryEntity("household", "Household"),
                 CategoryEntity("household-groceries", "Groceries", "household"),
