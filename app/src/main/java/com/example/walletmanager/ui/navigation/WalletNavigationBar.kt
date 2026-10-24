@@ -9,7 +9,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -28,6 +31,7 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun WalletNavigationBar(
     currentRoute: String?,
     backdrop: LayerBackdrop,
@@ -78,44 +82,46 @@ fun WalletNavigationBar(
     ) {
         destinations.forEach { (route, glyph, label) ->
             val selected = currentRoute?.substringBefore("?") == route::class.qualifiedName
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onNavigate(route) },
-                modifier = Modifier
-                    .weight(
-                        when (label) {
-                            "Accounts", "Settings" -> 1.15f
-                            "Investments" -> 1.25f
-                            else -> 1f
-                        }
+            CompositionLocalProvider(LocalRippleConfiguration provides null) {
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onNavigate(route) },
+                    modifier = Modifier
+                        .weight(
+                            when (label) {
+                                "Accounts", "Settings" -> 1.15f
+                                "Investments" -> 1.25f
+                                else -> 1f
+                            }
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(
+                            if (selected) {
+                                WalletBeige.copy(alpha = 0.22f)
+                            } else {
+                                WalletSurface.copy(alpha = 0f)
+                            }
+                        ),
+                    icon = { WalletIcon(glyph, color = if (selected) WalletBeige else WalletColors.muted, size = 20.dp) },
+                    label = {
+                        Text(
+                            text = label,
+                            fontSize = if (label == "Investments") investmentsLabelFontSize else labelFontSize,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = TextAlign.Center
+                        )
+                    },
+                    alwaysShowLabel = true,
+                    colors = NavigationBarItemDefaults.colors(
+                        indicatorColor = WalletSurface.copy(alpha = 0f),
+                        selectedIconColor = WalletBeige,
+                        unselectedIconColor = WalletColors.muted,
+                        selectedTextColor = WalletBeige,
+                        unselectedTextColor = WalletColors.muted
                     )
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(
-                        if (selected) {
-                            WalletBeige.copy(alpha = 0.22f)
-                        } else {
-                            WalletSurface.copy(alpha = 0f)
-                        }
-                    ),
-                icon = { WalletIcon(glyph, color = if (selected) WalletBeige else WalletColors.muted, size = 20.dp) },
-                label = {
-                    Text(
-                        text = label,
-                        fontSize = if (label == "Investments") investmentsLabelFontSize else labelFontSize,
-                        maxLines = 1,
-                        softWrap = false,
-                        textAlign = TextAlign.Center
-                    )
-                },
-                alwaysShowLabel = true,
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = WalletSurface.copy(alpha = 0f),
-                    selectedIconColor = WalletBeige,
-                    unselectedIconColor = WalletColors.muted,
-                    selectedTextColor = WalletBeige,
-                    unselectedTextColor = WalletColors.muted
                 )
-            )
+            }
         }
     }
 }
