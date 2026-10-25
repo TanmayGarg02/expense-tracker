@@ -180,6 +180,11 @@ class WalletRepository(private val database: WalletDatabase) {
             dao.insertSettings(SettingsEntity())
         }
 
+        dao.deleteSubcategories("pets")
+        dao.deleteCategory("pets")
+        dao.deleteSubcategories("subscriptions")
+        dao.deleteCategory("subscriptions")
+
         dao.insertCategories(
             listOf(
                 CategoryEntity("food", "Food"),
@@ -194,15 +199,6 @@ class WalletRepository(private val database: WalletDatabase) {
                 CategoryEntity("social-party", "Parties", "social"),
                 CategoryEntity("social-drinks", "Drinks & Cafe", "social"),
 
-                CategoryEntity("pets", "Pets"),
-                CategoryEntity("pets-food", "Pet Food", "pets"),
-                CategoryEntity("pets-vet", "Vet & Care", "pets"),
-
-                CategoryEntity("transport", "Transport"),
-                CategoryEntity("transport-fuel", "Fuel & Petrol", "transport"),
-                CategoryEntity("transport-cab", "Taxi / Cab", "transport"),
-                CategoryEntity("transport-transit", "Public Transit", "transport"),
-
                 // Keep the existing IDs so installed databases retain their category links.
                 CategoryEntity("culture", "Entertainment"),
                 CategoryEntity("culture-movies", "Movies & Events", "culture"),
@@ -214,14 +210,13 @@ class WalletRepository(private val database: WalletDatabase) {
                 CategoryEntity("travel-flights", "Flights", "travel"),
                 CategoryEntity("travel-stays", "Hotels & Stays", "travel"),
                 CategoryEntity("travel-trips", "Trips & Tours", "travel"),
+                CategoryEntity("transport-fuel", "Fuel & Petrol", "travel"),
+                CategoryEntity("transport-cab", "Taxi / Cab", "travel"),
+                CategoryEntity("transport-transit", "Public Transit", "travel"),
 
                 CategoryEntity("education", "Education"),
                 CategoryEntity("education-tuition", "Tuition & Courses", "education"),
                 CategoryEntity("education-books", "Books & Supplies", "education"),
-
-                CategoryEntity("subscriptions", "Subscriptions"),
-                CategoryEntity("subscriptions-digital", "Digital Services", "subscriptions"),
-                CategoryEntity("subscriptions-memberships", "Memberships", "subscriptions"),
 
                 CategoryEntity("household", "Household"),
                 CategoryEntity("household-groceries", "Groceries", "household"),
@@ -255,6 +250,7 @@ class WalletRepository(private val database: WalletDatabase) {
                 CategoryEntity("other", "Other")
             )
         )
+        dao.deleteCategory("transport")
     }
 
     suspend fun addSampleData(): Boolean {
@@ -444,9 +440,16 @@ class WalletRepository(private val database: WalletDatabase) {
         }
     }
 
+    private suspend fun saveNoteIfNew(note: String) {
+        val normalized = note.trim()
+        if (normalized.isNotEmpty() && !dao.hasNote(normalized)) {
+            dao.insertNotes(listOf(NoteEntity(text = normalized)))
+        }
+    }
+
     suspend fun addNote(note: String) {
-        if (note.isNotBlank()) {
-            dao.insertNotes(listOf(NoteEntity(text = note)))
+        database.withTransaction {
+            saveNoteIfNew(note)
         }
     }
 
@@ -537,6 +540,7 @@ class WalletRepository(private val database: WalletDatabase) {
                 )
                 dao.adjustBalance(accountId, cashback)
             }
+            saveNoteIfNew(note)
         }
     }
 
@@ -605,6 +609,7 @@ class WalletRepository(private val database: WalletDatabase) {
             dao.adjustBalance(sourceAccountId, -amountMinor)
             if (feeMinor > 0) dao.adjustBalance(sourceAccountId, -feeMinor)
             dao.adjustBalance(destinationAccountId, amountMinor)
+            saveNoteIfNew(note)
         }
     }
 
@@ -663,6 +668,7 @@ class WalletRepository(private val database: WalletDatabase) {
                 )
                 dao.adjustBalance(transaction.accountId, transaction.cashbackMinor)
             }
+            saveNoteIfNew(transaction.note)
         }
     }
 

@@ -14,7 +14,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,9 +36,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.time.YearMonth
 import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
 import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.TransactionKind
@@ -63,11 +75,16 @@ fun StatsScreen(
 ) {
     var filter by rememberSaveable { mutableStateOf("All") }
     var period by rememberSaveable { mutableStateOf("Monthly") }
+    var selectedMonthValue by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     var showFilter by rememberSaveable { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
-    val transactions = remember(state.transactions, filter) {
+    val selectedMonth = remember(selectedMonthValue) { YearMonth.parse(selectedMonthValue) }
+    val selectedMonthLabel = selectedMonth.month.name.lowercase(Locale.getDefault())
+        .replaceFirstChar { it.uppercase() } + " ${selectedMonth.year}"
+    val transactions = remember(state.transactions, filter, selectedMonth) {
         state.transactions.filter {
-            filter == "All" || it.kind.name.equals(filter, ignoreCase = true) || it.category.contains(filter, ignoreCase = true)
+            (filter == "All" || it.kind.name.equals(filter, ignoreCase = true) || it.category.contains(filter, ignoreCase = true)) &&
+                transactionMonth(it) == selectedMonth
         }
     }
 
@@ -78,29 +95,62 @@ fun StatsScreen(
             selected = filter != "All",
             onClick = { showFilter = true },
         )
-        PieChart(state, transactions)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatsControlButton(
-                label = "Weekly",
-                selected = period == "Weekly",
-                onClick = { period = "Weekly" },
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { selectedMonthValue = selectedMonth.minusMonths(1).toString() }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = "Previous Month",
+                    tint = WalletColors.cream
+                )
+            }
+            Text(
+                text = selectedMonthLabel,
+                color = WalletColors.cream,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp
             )
-            StatsControlButton(
-                label = "Monthly",
-                selected = period == "Monthly",
-                onClick = { period = "Monthly" },
-            )
+            IconButton(onClick = { selectedMonthValue = selectedMonth.plusMonths(1).toString() }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Next Month",
+                    tint = WalletColors.cream
+                )
+            }
         }
-        ExpensePeriodGraph(transactions, period, state)
-        SummaryCard("Saved this month", state.incomeMinor - state.expenseMinor, state)
-        SectionTitle("Transactions")
-        transactions.forEach {
-            TransactionRow(
-                item = it,
-                accounts = state.accounts,
-                currency = state.baseCurrency,
-                onClick = { transactionToEdit = it }
-            )
+
+        if (transactions.isEmpty()) {
+            StatsMonthEmptyState(selectedMonthLabel)
+        } else {
+            PieChart(state, transactions)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatsControlButton(
+                    label = "Weekly",
+                    selected = period == "Weekly",
+                    onClick = { period = "Weekly" },
+                )
+                StatsControlButton(
+                    label = "Monthly",
+                    selected = period == "Monthly",
+                    onClick = { period = "Monthly" },
+                )
+            }
+            ExpensePeriodGraph(transactions, period, state, selectedMonth)
+            val monthSaved = transactions.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amountMinor } -
+                transactions.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amountMinor }
+            SummaryCard("Saved in $selectedMonthLabel", monthSaved, state)
+            SectionTitle("Transactions")
+            transactions.forEach {
+                TransactionRow(
+                    item = it,
+                    accounts = state.accounts,
+                    currency = state.baseCurrency,
+                    onClick = { transactionToEdit = it }
+                )
+            }
         }
         Spacer(Modifier.height(70.dp))
     }
@@ -147,6 +197,45 @@ fun StatsScreen(
 }
 
 @Composable
+private fun StatsMonthEmptyState(monthLabel: String) {
+    val composition by rememberLottieComposition(
+        LottieCompositionSpec.Asset("stats_empty.lottie")
+    )
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = LottieConstants.IterateForever
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        LottieAnimation(
+            composition = composition,
+            progress = { progress },
+            modifier = Modifier.size(200.dp)
+        )
+        Text(
+            text = "No transactions for $monthLabel.",
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            color = WalletColors.muted,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+private fun transactionDate(transaction: Transaction): LocalDate? = runCatching {
+        LocalDate.parse(transaction.date.substringBefore(" "))
+    }.getOrNull() ?: transaction.createdAt.takeIf { it > 0 }?.let { timestamp ->
+        Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+    }
+
+private fun transactionMonth(transaction: Transaction): YearMonth? = transactionDate(transaction)?.let(YearMonth::from)
+
+@Composable
 private fun StatsControlButton(
     label: String,
     selected: Boolean,
@@ -169,9 +258,10 @@ private fun StatsControlButton(
 private fun ExpensePeriodGraph(
     transactions: List<Transaction>,
     period: String,
-    state: WalletUiState
+    state: WalletUiState,
+    selectedMonth: YearMonth
 ) {
-    val entries = remember(transactions, period) {
+    val entries = remember(transactions, period, selectedMonth) {
         if (period == "Monthly") {
             (1..5).map { week ->
                 transactions
@@ -180,16 +270,12 @@ private fun ExpensePeriodGraph(
             }
         } else {
             val today = LocalDate.now()
+            val weekEnd = if (selectedMonth == YearMonth.from(today)) today else selectedMonth.atEndOfMonth()
             (0..6).map { offset ->
-                val date = today.minusDays((6 - offset).toLong())
+                val date = weekEnd.minusDays((6 - offset).toLong())
                 transactions
                     .filter { transaction ->
-                        val parsed = runCatching {
-                            LocalDate.parse(
-                                transaction.date.substringBefore(" "),
-                                DateTimeFormatter.ofPattern("yyyy-MM-dd")
-                            )
-                        }.getOrNull()
+                        val parsed = transactionDate(transaction)
                         parsed == date && transaction.kind == TransactionKind.EXPENSE
                     }
                     .let { expenses -> expenses.sumOf { it.amountMinor } to expenses.size }

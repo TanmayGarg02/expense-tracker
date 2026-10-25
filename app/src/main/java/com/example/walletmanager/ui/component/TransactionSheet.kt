@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -188,18 +189,11 @@ fun TransactionSheet(
     var transferMode by rememberSaveable { mutableStateOf(initialTransfer) }
     var noteFocused by remember { mutableStateOf(false) }
     val noteBringIntoViewRequester = remember { BringIntoViewRequester() }
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
 
-    LaunchedEffect(activePanel) {
-        if (activePanel != "note") {
-            focusManager.clearFocus(force = true)
-            keyboardController?.hide()
-        }
-    }
-
+    // Re-run whenever the note regains focus (even with empty text) so the field and
+    // its suggestions are scrolled above the keyboard after returning from the numpad.
     LaunchedEffect(note, noteFocused, state.notes) {
-        if (noteFocused && note.isNotBlank()) {
+        if (noteFocused) {
             noteBringIntoViewRequester.bringIntoView()
         }
     }
@@ -216,7 +210,10 @@ fun TransactionSheet(
     )
 
     val selectedAccount = state.accounts.firstOrNull { it.id == accountId }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { it != SheetValue.Hidden }
+    )
     val snackbarController = LocalWalletSnackbarController.current
     val haptics = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -229,420 +226,180 @@ fun TransactionSheet(
         sheetState = sheetState,
         containerColor = ScreenBg
     ) {
+        // These must be read INSIDE the sheet content so they bind to the
+        // bottom sheet's dialog window, not the activity window.
+        val focusManager = LocalFocusManager.current
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        val dismissInput: () -> Unit = {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+            noteFocused = false
+        }
+
+        LaunchedEffect(activePanel) {
+            if (activePanel != "note") dismissInput()
+        }
+
         Box(
             Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .imePadding()
         ) {
-          Column(
-              modifier = Modifier
-                  .fillMaxWidth()
-                  .fillMaxHeight()
-                  .background(ScreenBg)
-          ) {
-            // Top Navigation Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = dismiss) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = CreamText
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = when (kind) {
-                            TransactionKind.EXPENSE -> if (transferMode) "Transfer" else "Expense"
-                            TransactionKind.INCOME -> "Income"
-                        },
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CreamText
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isEditing && onDelete != null) {
-                        IconButton(onClick = { confirmTransactionDelete = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = RedAccent
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Top Segmented Tab Buttons (Income, Expense, Transfer)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Income Tab
-                TabButton(
-                    label = "Income",
-                    isSelected = kind == TransactionKind.INCOME,
-                    activeColor = GreenAccent,
-                    onClick = {
-                        kind = TransactionKind.INCOME
-                        transferMode = false
-                        transferFeeText = ""
-                        selectedParentId = "income"
-                        selectedCategoryName = "Income · Salary"
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                // Expense Tab
-                TabButton(
-                    label = "Expense",
-                    isSelected = kind == TransactionKind.EXPENSE && !transferMode,
-                    activeColor = RedAccent,
-                    onClick = {
-                        kind = TransactionKind.EXPENSE
-                        transferMode = false
-                        transferFeeText = ""
-                        selectedParentId = "food"
-                        selectedCategoryName = "Food · Lunch"
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                // Transfer Tab (maps to Expense for now)
-                TabButton(
-                    label = "Transfer",
-                    isSelected = transferMode,
-                    activeColor = AmberAccent,
-                    onClick = {
-                        kind = TransactionKind.EXPENSE
-                        transferMode = true
-                        transferFeeText = ""
-                        selectedCategoryName = "Transfer"
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Form Rows (Date, Amount, Category, Account, Note)
             Column(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 3.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .fillMaxHeight()
+                    .background(ScreenBg)
             ) {
-                // Date Row
+                // Top Navigation Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            activePanel = "date"
-                            showCategoryPanel = true
-                        },
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Date",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(72.dp)
-                    )
-                    Text(
-                        text = runCatching {
-                            val parsed = LocalDateTime.parse(
-                                dateText,
-                                DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = dismiss) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = CreamText
                             )
-                            "${formatWalletDate(parsed.toLocalDate())} · ${parsed.format(DateTimeFormatter.ofPattern("h:mm a"))}"
-                        }.getOrDefault(dateText),
-                        color = CreamText,
-                        fontSize = 13.sp,
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = when (kind) {
+                                TransactionKind.EXPENSE -> if (transferMode) "Transfer" else "Expense"
+                                TransactionKind.INCOME -> "Income"
+                            },
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CreamText
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isEditing && onDelete != null) {
+                            IconButton(onClick = { confirmTransactionDelete = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = RedAccent
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Top Segmented Tab Buttons (Income, Expense, Transfer)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Income Tab
+                    TabButton(
+                        label = "Income",
+                        isSelected = kind == TransactionKind.INCOME,
+                        activeColor = GreenAccent,
+                        onClick = {
+                            kind = TransactionKind.INCOME
+                            transferMode = false
+                            transferFeeText = ""
+                            selectedParentId = "income"
+                            selectedCategoryName = "Income · Salary"
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Expense Tab
+                    TabButton(
+                        label = "Expense",
+                        isSelected = kind == TransactionKind.EXPENSE && !transferMode,
+                        activeColor = RedAccent,
+                        onClick = {
+                            kind = TransactionKind.EXPENSE
+                            transferMode = false
+                            transferFeeText = ""
+                            selectedParentId = "food"
+                            selectedCategoryName = "Food · Lunch"
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Transfer Tab (maps to Expense for now)
+                    TabButton(
+                        label = "Transfer",
+                        isSelected = transferMode,
+                        activeColor = AmberAccent,
+                        onClick = {
+                            kind = TransactionKind.EXPENSE
+                            transferMode = true
+                            transferFeeText = ""
+                            selectedCategoryName = "Transfer"
+                        },
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                // Amount Row
-                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            focusManager.clearFocus(force = true)
-                            keyboardController?.hide()
-                            activePanel = "amount"
-                            showCategoryPanel = true
-                        },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Amount",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(72.dp)
-                    )
-                    Box(
-                        Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = amountText,
-                            onValueChange = {},
-                            enabled = false,
-                            textStyle = compactInputStyle,
-                            placeholder = {
-                                Text("0.00", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = activeColor,
-                                unfocusedBorderColor = LineColor,
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                disabledTextColor = activeColor,
-                                focusedTextColor = activeColor,
-                                unfocusedTextColor = activeColor
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                        )
-                    }
-                }
+                Spacer(Modifier.height(12.dp))
 
-                // Category Row
-                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                // Form Rows (Date, Amount, Category, Account, Note)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 3.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "Category",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(72.dp)
-                    )
-                    Box(
+                    // Date Row
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                dismissInput()
+                                activePanel = "date"
                                 showCategoryPanel = true
-                                activePanel = "category"
-                            }
-                    ) {
-                        OutlinedTextField(
-                            value = if (transferMode) "Transfer" else selectedCategoryName,
-                            onValueChange = {},
-                            readOnly = true,
-                            enabled = false,
-                            textStyle = compactInputStyle,
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                disabledBorderColor = if (showCategoryPanel) activeColor else LineColor,
-                                disabledTextColor = CreamText,
-                                disabledContainerColor = Color.Transparent
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                        )
-                    }
-                }
-
-                // Account Row
-                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Account",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(72.dp)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { accountMenu = !accountMenu }
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = selectedAccount?.name ?: "Choose account"
-                                role = Role.Button
-                            }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedAccount?.let {
-                                "${it.name} · ${formatMoney(it.balanceMinor, true, state.baseCurrency)}"
-                            } ?: "Choose account",
-                            onValueChange = {},
-                            readOnly = true,
-                            enabled = false,
-                            singleLine = true,
-                            maxLines = 1,
-                            textStyle = compactInputStyle,
-                            modifier = Modifier
-                                .fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                disabledBorderColor = LineColor,
-                                disabledTextColor = CreamText,
-                                disabledContainerColor = Color.Transparent
-                            )
-                        )
-                        DropdownMenu(
-                            expanded = accountMenu,
-                            onDismissRequest = { accountMenu = false },
-                            modifier = Modifier.walletDropdownSurface()
-                        ) {
-                            state.accounts.forEach { acc ->
-                                DropdownMenuItem(
-                                    modifier = Modifier.walletDropdownItem(
-                                        selected = acc.id == accountId,
-                                        accent = if (kind == TransactionKind.INCOME) GreenAccent else RedAccent
-                                    ),
-                                    text = {
-                                        Text(
-                                            "${acc.name} · ${formatMoney(acc.balanceMinor, true, state.baseCurrency)}",
-                                            fontSize = 12.sp,
-                                            color = if (acc.id == accountId && kind == TransactionKind.INCOME) ScreenBg else CreamText
-                                        )
-                                    },
-                                    onClick = {
-                                        accountId = acc.id
-                                        if (destinationAccountId == acc.id) {
-                                            destinationAccountId = state.accounts.firstOrNull { it.id != acc.id }?.id.orEmpty()
-                                        }
-                                        accountMenu = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (transferMode) {
-                    HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
+                            },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "To account",
+                            text = "Date",
                             color = MutedText,
                             fontSize = 13.sp,
                             modifier = Modifier.width(72.dp)
                         )
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .clickable { destinationAccountMenu = !destinationAccountMenu }
-                        ) {
-                            val destination = state.accounts.firstOrNull { it.id == destinationAccountId }
-                            OutlinedTextField(
-                                value = destination?.let {
-                                    "${it.name} · ${formatMoney(it.balanceMinor, true, state.baseCurrency)}"
-                                } ?: "Choose account",
-                                onValueChange = {},
-                                enabled = false,
-                                singleLine = true,
-                                maxLines = 1,
-                                textStyle = compactInputStyle,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    disabledBorderColor = LineColor,
-                                    disabledTextColor = CreamText,
-                                    disabledContainerColor = Color.Transparent
-                                )
-                            )
-                            DropdownMenu(
-                                expanded = destinationAccountMenu,
-                                onDismissRequest = { destinationAccountMenu = false },
-                                modifier = Modifier.walletDropdownSurface()
-                            ) {
-                                state.accounts
-                                    .filter { it.id != accountId }
-                                    .forEach { acc ->
-                                        DropdownMenuItem(
-                                            modifier = Modifier.walletDropdownItem(
-                                                selected = acc.id == destinationAccountId,
-                                                accent = if (kind == TransactionKind.INCOME) GreenAccent else RedAccent
-                                            ),
-                                            text = { Text(acc.name, color = if (acc.id == destinationAccountId && kind == TransactionKind.INCOME) ScreenBg else CreamText) },
-                                            onClick = {
-                                                destinationAccountId = acc.id
-                                                destinationAccountMenu = false
-                                            }
-                                        )
-                                    }
-                            }
-                        }
-                    }
-                    HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         Text(
-                            "Fee (optional)",
-                            color = MutedText,
-                            fontSize = 10.sp,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.width(72.dp)
-                        )
-                        OutlinedTextField(
-                            value = transferFeeText,
-                            onValueChange = { transferFeeText = it },
-                            placeholder = {
-                                Text(
-                                    "0",
-                                    color = MutedText.copy(alpha = 0.5f),
-                                    fontSize = 13.sp,
-                                    lineHeight = 18.sp
+                            text = runCatching {
+                                val parsed = LocalDateTime.parse(
+                                    dateText,
+                                    DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
                                 )
-                            },
-                            prefix = { Text("${state.baseCurrency.symbol} ", fontSize = 13.sp) },
-                            singleLine = true,
-                            textStyle = compactInputStyle,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = activeColor,
-                                unfocusedBorderColor = LineColor,
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = CreamText,
-                                unfocusedTextColor = CreamText
-                            ),
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                                "${formatWalletDate(parsed.toLocalDate())} · ${parsed.format(DateTimeFormatter.ofPattern("h:mm a"))}"
+                            }.getOrDefault(dateText),
+                            color = CreamText,
+                            fontSize = 13.sp,
+                            modifier = Modifier.weight(1f)
                         )
                     }
-                }
 
-                if (kind == TransactionKind.EXPENSE) {
+                    // Amount Row
                     HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                focusManager.clearFocus(force = true)
-                                keyboardController?.hide()
-                                activePanel = "cashback"
+                                dismissInput()
+                                activePanel = "amount"
                                 showCategoryPanel = true
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Cashback",
+                            text = "Amount",
                             color = MutedText,
                             fontSize = 13.sp,
                             modifier = Modifier.width(72.dp)
@@ -651,23 +408,23 @@ fun TransactionSheet(
                             Modifier.fillMaxWidth()
                         ) {
                             OutlinedTextField(
-                                value = cashbackText,
+                                value = amountText,
                                 onValueChange = {},
                                 enabled = false,
                                 textStyle = compactInputStyle,
                                 placeholder = {
-                                    Text("Optional", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
+                                    Text("0.00", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
                                 },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = GreenAccent,
+                                    focusedBorderColor = activeColor,
                                     unfocusedBorderColor = LineColor,
                                     focusedContainerColor = Color.Transparent,
                                     unfocusedContainerColor = Color.Transparent,
-                                    disabledTextColor = GreenAccent,
-                                    focusedTextColor = GreenAccent,
-                                    unfocusedTextColor = GreenAccent
+                                    disabledTextColor = activeColor,
+                                    focusedTextColor = activeColor,
+                                    unfocusedTextColor = activeColor
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -675,378 +432,622 @@ fun TransactionSheet(
                             )
                         }
                     }
-                }
 
-                // Keep the note field last so it can sit directly above the keyboard while editing.
-                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        text = "Note",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(72.dp).padding(top = 14.dp)
-                    )
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .bringIntoViewRequester(noteBringIntoViewRequester)
-                    ) {
-                        OutlinedTextField(
-                            value = note,
-                            onValueChange = { note = it },
-                            textStyle = compactInputStyle,
-                            placeholder = {
-                                Text("Write note...", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
-                            },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = if (activePanel == "note") activeColor else LineColor,
-                                unfocusedBorderColor = LineColor,
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = CreamText,
-                                unfocusedTextColor = CreamText
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .onFocusChanged { focusState ->
-                                    noteFocused = focusState.isFocused
-                                    if (focusState.isFocused) {
-                                        activePanel = "note"
-                                        showCategoryPanel = false
-                                    }
-                                }
-                        )
-                        val matchingNotes = remember(state.notes, note) {
-                            if (note.isBlank()) emptyList()
-                            else state.notes
-                                .filter { it.text.contains(note, ignoreCase = true) }
-                                .map { it.text }
-                        }
-                        if (noteFocused && matchingNotes.isNotEmpty()) {
-                            Column(
+                    if (!transferMode) {
+                        // Category Row
+                        HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Category",
+                                color = MutedText,
+                                fontSize = 13.sp,
+                                modifier = Modifier.width(72.dp)
+                            )
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 160.dp)
-                                    .padding(top = 6.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(WalletSurfaceVariant)
-                                    .border(1.dp, WalletBeige.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                                    .verticalScroll(rememberScrollState())
+                                    .clickable {
+                                        dismissInput()
+                                        showCategoryPanel = true
+                                        activePanel = "category"
+                                    }
                             ) {
-                                Text(
-                                    text = "Saved note suggestions · ${matchingNotes.size}",
-                                    color = WalletBeige,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                                OutlinedTextField(
+                                    value = selectedCategoryName,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    enabled = false,
+                                    textStyle = compactInputStyle,
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        disabledBorderColor = if (showCategoryPanel) activeColor else LineColor,
+                                        disabledTextColor = CreamText,
+                                        disabledContainerColor = Color.Transparent
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
                                 )
-                                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                                matchingNotes.forEach { matchingNote ->
+                            }
+                        }
+                    }
+
+                    // Account Row
+                    HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Account",
+                            color = MutedText,
+                            fontSize = 13.sp,
+                            modifier = Modifier.width(72.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { accountMenu = !accountMenu }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = selectedAccount?.name ?: "Choose account"
+                                    role = Role.Button
+                                }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedAccount?.let {
+                                    "${it.name} · ${formatMoney(it.balanceMinor, true, state.baseCurrency)}"
+                                } ?: "Choose account",
+                                onValueChange = {},
+                                readOnly = true,
+                                enabled = false,
+                                singleLine = true,
+                                maxLines = 1,
+                                textStyle = compactInputStyle,
+                                modifier = Modifier
+                                    .fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledBorderColor = LineColor,
+                                    disabledTextColor = CreamText,
+                                    disabledContainerColor = Color.Transparent
+                                )
+                            )
+                            DropdownMenu(
+                                expanded = accountMenu,
+                                onDismissRequest = { accountMenu = false },
+                                modifier = Modifier.walletDropdownSurface()
+                            ) {
+                                state.accounts.forEach { acc ->
                                     DropdownMenuItem(
-                                        text = { Text(matchingNote, color = CreamText, fontSize = 13.sp) },
+                                        modifier = Modifier.walletDropdownItem(
+                                            selected = acc.id == accountId,
+                                            accent = if (kind == TransactionKind.INCOME) GreenAccent else RedAccent
+                                        ),
+                                        text = {
+                                            Text(
+                                                "${acc.name} · ${formatMoney(acc.balanceMinor, true, state.baseCurrency)}",
+                                                fontSize = 12.sp,
+                                                color = if (acc.id == accountId && kind == TransactionKind.INCOME) ScreenBg else CreamText
+                                            )
+                                        },
                                         onClick = {
-                                            note = matchingNote
-                                            noteFocused = false
-                                            focusManager.clearFocus(force = true)
-                                            keyboardController?.hide()
+                                            accountId = acc.id
+                                            if (destinationAccountId == acc.id) {
+                                                destinationAccountId = state.accounts.firstOrNull { it.id != acc.id }?.id.orEmpty()
+                                            }
+                                            accountMenu = false
                                         }
                                     )
                                 }
                             }
                         }
                     }
-                }
-            }
 
-            Spacer(Modifier.height(4.dp))
+                    if (transferMode) {
+                        HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "To account",
+                                color = MutedText,
+                                fontSize = 13.sp,
+                                modifier = Modifier.width(72.dp)
+                            )
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .clickable { destinationAccountMenu = !destinationAccountMenu }
+                            ) {
+                                val destination = state.accounts.firstOrNull { it.id == destinationAccountId }
+                                OutlinedTextField(
+                                    value = destination?.let {
+                                        "${it.name} · ${formatMoney(it.balanceMinor, true, state.baseCurrency)}"
+                                    } ?: "Choose account",
+                                    onValueChange = {},
+                                    enabled = false,
+                                    singleLine = true,
+                                    maxLines = 1,
+                                    textStyle = compactInputStyle,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        disabledBorderColor = LineColor,
+                                        disabledTextColor = CreamText,
+                                        disabledContainerColor = Color.Transparent
+                                    )
+                                )
+                                DropdownMenu(
+                                    expanded = destinationAccountMenu,
+                                    onDismissRequest = { destinationAccountMenu = false },
+                                    modifier = Modifier.walletDropdownSurface()
+                                ) {
+                                    state.accounts
+                                        .filter { it.id != accountId }
+                                        .forEach { acc ->
+                                            DropdownMenuItem(
+                                                modifier = Modifier.walletDropdownItem(
+                                                    selected = acc.id == destinationAccountId,
+                                                    accent = if (kind == TransactionKind.INCOME) GreenAccent else RedAccent
+                                                ),
+                                                text = { Text(acc.name, color = if (acc.id == destinationAccountId && kind == TransactionKind.INCOME) ScreenBg else CreamText) },
+                                                onClick = {
+                                                    destinationAccountId = acc.id
+                                                    destinationAccountMenu = false
+                                                }
+                                            )
+                                        }
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Fee",
+                                color = MutedText,
+                                fontSize = 13.sp,
+                                modifier = Modifier.width(72.dp)
+                            )
+                            OutlinedTextField(
+                                value = transferFeeText,
+                                onValueChange = { transferFeeText = it },
+                                placeholder = {
+                                    Text(
+                                        "0 (optional)",
+                                        color = MutedText.copy(alpha = 0.5f),
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp
+                                    )
+                                },
+                                singleLine = true,
+                                textStyle = compactInputStyle,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = activeColor,
+                                    unfocusedBorderColor = LineColor,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = CreamText,
+                                    unfocusedTextColor = CreamText
+                                ),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            )
+                        }
+                    }
 
-            // Bottom Category Split Panel
-            if (showCategoryPanel && activePanel != "note") {
-                Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(panelMinHeight)
-                    .background(CategoryPanelBg)
-                ) {
-                    // Panel Header Bar
+                    if (kind == TransactionKind.EXPENSE) {
+                        HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    dismissInput()
+                                    activePanel = "cashback"
+                                    showCategoryPanel = true
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Cashback",
+                                color = MutedText,
+                                fontSize = 13.sp,
+                                modifier = Modifier.width(72.dp)
+                            )
+                            Box(
+                                Modifier.fillMaxWidth()
+                            ) {
+                                OutlinedTextField(
+                                    value = cashbackText,
+                                    onValueChange = {},
+                                    enabled = false,
+                                    textStyle = compactInputStyle,
+                                    placeholder = {
+                                            Text("0 (optional)", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
+                                    },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = GreenAccent,
+                                        unfocusedBorderColor = LineColor,
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledTextColor = GreenAccent,
+                                        focusedTextColor = GreenAccent,
+                                        unfocusedTextColor = GreenAccent
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Keep the note field last so it can sit directly above the keyboard while editing.
+                    HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(CategoryPanelHeaderBg)
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
                     ) {
                         Text(
-                            text = when (activePanel) {
-                                "date" -> "Choose date"
-                                "amount" -> "Enter amount"
-                                "cashback" -> "Enter cashback"
-                                "note" -> ""
-                                else -> "Category"
-                            },
-                            color = CreamText,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Note",
+                            color = MutedText,
+                            fontSize = 13.sp,
+                            modifier = Modifier.width(72.dp).padding(top = 14.dp)
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (activePanel == "category") {
-                                IconButton(onClick = { categoryManager = true }) {
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .bringIntoViewRequester(noteBringIntoViewRequester)
+                        ) {
+                            OutlinedTextField(
+                                value = note,
+                                onValueChange = { note = it },
+                                textStyle = compactInputStyle,
+                                placeholder = {
+                                    Text("Write note...", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
+                                },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = if (activePanel == "note") activeColor else LineColor,
+                                    unfocusedBorderColor = LineColor,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = CreamText,
+                                    unfocusedTextColor = CreamText
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .onFocusChanged { focusState ->
+                                        noteFocused = focusState.isFocused
+                                        if (focusState.isFocused) {
+                                            activePanel = "note"
+                                            showCategoryPanel = false
+                                        }
+                                    }
+                            )
+                            val matchingNotes = remember(state.notes, note) {
+                                if (note.isBlank()) emptyList()
+                                else state.notes
+                                    .filter { it.text.contains(note, ignoreCase = true) }
+                                    .map { it.text }
+                            }
+                            if (noteFocused && matchingNotes.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 160.dp)
+                                        .padding(top = 6.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(WalletSurfaceVariant)
+                                        .border(1.dp, WalletBeige.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    matchingNotes.forEach { matchingNote ->
+                                        DropdownMenuItem(
+                                            text = { Text(matchingNote, color = CreamText, fontSize = 13.sp) },
+                                            onClick = {
+                                                note = matchingNote
+                                                dismissInput()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // Bottom Category Split Panel
+                if (showCategoryPanel && activePanel != "note" && !(transferMode && activePanel == "category")) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(panelMinHeight)
+                            .background(CategoryPanelBg)
+                    ) {
+                        // Panel Header Bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(CategoryPanelHeaderBg)
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when (activePanel) {
+                                    "date" -> "Choose date"
+                                    "amount" -> "Enter amount"
+                                    "cashback" -> "Enter cashback"
+                                    "note" -> ""
+                                    else -> "Category"
+                                },
+                                color = CreamText,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (activePanel == "category") {
+                                    IconButton(onClick = { categoryManager = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit Category",
+                                            tint = CreamText
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { showCategoryPanel = false }) {
                                     Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Edit Category",
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close Panel",
                                         tint = CreamText
                                     )
                                 }
                             }
-                            IconButton(onClick = { showCategoryPanel = false }) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close Panel",
-                                    tint = CreamText
-                                )
-                            }
                         }
-                    }
 
-                    AnimatedContent(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        targetState = activePanel,
-                        transitionSpec = {
-                            (fadeIn(tween(90, easing = FastOutSlowInEasing)) +
-                                slideInVertically(tween(110, easing = FastOutSlowInEasing)) { it / 14 }) togetherWith
-                                (fadeOut(tween(75, easing = FastOutSlowInEasing)) +
-                                    slideOutVertically(tween(90, easing = FastOutSlowInEasing)) { -it / 18 })
-                        },
-                        label = "transaction-input-panel"
-                    ) { panel ->
-                        if (panel == "category") {
-                        // Split Columns (Left Parents, Right Subcategories)
-                        Row(
+                        AnimatedContent(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .fillMaxHeight()
-                        ) {
-                            // Left Column: Parent Categories
-                            val parents = remember(state.categories, kind) {
-                                state.categories.filter {
-                                    it.parentId == null &&
-                                            (kind == TransactionKind.INCOME && it.id == "income" ||
-                                                    kind == TransactionKind.EXPENSE && it.id != "income")
-                                }
-                            }
-                            val activeParent = parents.firstOrNull { it.id == selectedParentId } ?: parents.firstOrNull()
+                                .weight(1f),
+                            targetState = activePanel,
+                            transitionSpec = {
+                                (fadeIn(tween(90, easing = FastOutSlowInEasing)) +
+                                        slideInVertically(tween(110, easing = FastOutSlowInEasing)) { it / 14 }) togetherWith
+                                        (fadeOut(tween(75, easing = FastOutSlowInEasing)) +
+                                                slideOutVertically(tween(90, easing = FastOutSlowInEasing)) { -it / 18 })
+                            },
+                            label = "transaction-input-panel"
+                        ) { panel ->
+                            if (panel == "category") {
+                                // Split Columns (Left Parents, Right Subcategories)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight()
+                                ) {
+                                    // Left Column: Parent Categories
+                                    val parents = remember(state.categories, kind) {
+                                        state.categories.filter {
+                                            it.parentId == null &&
+                                                    (kind == TransactionKind.INCOME && it.id == "income" ||
+                                                            kind == TransactionKind.EXPENSE && it.id != "income")
+                                        }.sortedBy { it.id == "other" }
+                                    }
+                                    val activeParent = parents.firstOrNull { it.id == selectedParentId } ?: parents.firstOrNull()
 
-                            Column(
-                                modifier = Modifier
-                                    .width(148.dp)
-                                    .fillMaxHeight()
-                                    .background(CategoryPanelLeftBg)
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                parents.forEach { parent ->
-                                    val isSelected = parent.id == activeParent?.id
-                                    Row(
+                                    Column(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                selectedParentId = parent.id
-                                                selectedCategoryName = parent.name
-                                            }
-                                            .background(if (isSelected) DarkCardBg else Color.Transparent)
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                            .width(148.dp)
+                                            .fillMaxHeight()
+                                            .background(CategoryPanelLeftBg)
+                                            .verticalScroll(rememberScrollState())
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            WalletIcon(categoryIconName(parent.name), size = 16.dp, color = WalletColors.cream)
-                                            Spacer(Modifier.width(10.dp))
-                                            Text(
-                                                text = parent.name,
-                                                color = CreamText,
-                                                fontSize = 13.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                            )
+                                        parents.forEach { parent ->
+                                            val isSelected = parent.id == activeParent?.id
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        selectedParentId = parent.id
+                                                        selectedCategoryName = parent.name
+                                                    }
+                                                    .background(if (isSelected) DarkCardBg else Color.Transparent)
+                                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    WalletIcon(categoryIconName(parent.name), size = 16.dp, color = WalletColors.cream)
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Text(
+                                                        text = parent.name,
+                                                        color = CreamText,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                }
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                    contentDescription = null,
+                                                    tint = MutedText,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
                                         }
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                            contentDescription = null,
-                                            tint = MutedText,
-                                            modifier = Modifier.size(16.dp)
-                                        )
                                     }
-                                    HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
-                                }
-                            }
 
-                            // Right Column: Subcategories of Active Parent
-                            val subcategories = remember(state.categories, activeParent) {
-                                if (activeParent == null) emptyList()
-                                else state.categories.filter { it.parentId == activeParent.id }
-                            }
+                                    // Right Column: Subcategories of Active Parent
+                                    val subcategories = remember(state.categories, activeParent) {
+                                        if (activeParent == null) emptyList()
+                                        else state.categories.filter { it.parentId == activeParent.id }
+                                    }
 
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .background(CategoryPanelBg)
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                if (activeParent != null) {
-                                    val isParentOnlySelected = selectedCategoryName == activeParent.name
-                                    Row(
+                                    Column(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                selectedCategoryName = activeParent.name
-                                            }
-                                            .background(if (isParentOnlySelected) DarkCardBg else Color.Transparent)
-                                            .padding(horizontal = 20.dp, vertical = 14.dp)
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .background(CategoryPanelBg)
+                                            .verticalScroll(rememberScrollState())
                                     ) {
-                                        Text(
-                                            text = "${activeParent.name} (Main category)",
-                                            color = if (isParentOnlySelected) activeColor else CreamText,
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isParentOnlySelected) FontWeight.Bold else FontWeight.SemiBold
-                                        )
+                                        if (activeParent != null) {
+                                            val isParentOnlySelected = selectedCategoryName == activeParent.name
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        selectedCategoryName = activeParent.name
+                                                    }
+                                                    .background(if (isParentOnlySelected) DarkCardBg else Color.Transparent)
+                                                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${activeParent.name} (Main category)",
+                                                    color = if (isParentOnlySelected) activeColor else CreamText,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isParentOnlySelected) FontWeight.Bold else FontWeight.SemiBold
+                                                )
+                                            }
+                                            HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                        }
+                                        subcategories.forEach { sub ->
+                                            val isSubSelected = selectedCategoryName == "${activeParent?.name} · ${sub.name}" || selectedCategoryName == sub.name
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        selectedCategoryName = "${activeParent?.name} · ${sub.name}"
+                                                    }
+                                                    .background(if (isSubSelected) DarkCardBg else Color.Transparent)
+                                                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                                            ) {
+                                                Text(
+                                                    text = sub.name,
+                                                    color = if (isSubSelected) activeColor else CreamText,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                            HorizontalDivider(color = LineColor.copy(alpha = 0.3f), thickness = 0.5.dp)
+                                        }
                                     }
-                                    HorizontalDivider(color = LineColor.copy(alpha = 0.5f), thickness = 0.5.dp)
                                 }
-                                subcategories.forEach { sub ->
-                                    val isSubSelected = selectedCategoryName == "${activeParent?.name} · ${sub.name}" || selectedCategoryName == sub.name
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                selectedCategoryName = "${activeParent?.name} · ${sub.name}"
-                                            }
-                                            .background(if (isSubSelected) DarkCardBg else Color.Transparent)
-                                            .padding(horizontal = 20.dp, vertical = 14.dp)
-                                    ) {
-                                        Text(
-                                            text = sub.name,
-                                            color = if (isSubSelected) activeColor else CreamText,
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal
+                            } else {
+                                when (panel) {
+                                    "date" -> DatePanel(
+                                        initialDate = runCatching {
+                                            LocalDateTime.parse(
+                                                dateText,
+                                                DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
+                                            ).toLocalDate()
+                                        }.getOrDefault(LocalDate.now())
+                                    ) { selectedDate ->
+                                        dateText = selectedDate.atTime(LocalTime.now()).format(
+                                            DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
                                         )
+                                        activePanel = "category"
                                     }
-                                    HorizontalDivider(color = LineColor.copy(alpha = 0.3f), thickness = 0.5.dp)
+                                    "amount" -> NumberPad(
+                                        value = amountText,
+                                        onValueChange = { amountText = it },
+                                        onDone = { activePanel = "category" }
+                                    )
+                                    "cashback" -> NumberPad(
+                                        value = cashbackText,
+                                        onValueChange = { cashbackText = it },
+                                        onDone = { activePanel = "category" }
+                                    )
+                                    "note" -> Unit
                                 }
                             }
                         }
-                    } else {
-                        when (panel) {
-                            "date" -> DatePanel(
-                                initialDate = runCatching {
-                                    LocalDateTime.parse(
-                                        dateText,
-                                        DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
-                                    ).toLocalDate()
-                                }.getOrDefault(LocalDate.now())
-                            ) { selectedDate ->
-                                dateText = selectedDate.atTime(LocalTime.now()).format(
-                                    DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
-                                )
-                                activePanel = "category"
-                            }
-                            "amount" -> NumberPad(
-                                value = amountText,
-                                onValueChange = { amountText = it },
-                                onDone = { activePanel = "category" }
-                            )
-                            "cashback" -> NumberPad(
-                                value = cashbackText,
-                                onValueChange = { cashbackText = it },
-                                onDone = { activePanel = "category" }
-                            )
-                            "note" -> Unit
-                        }
-                    }
                     }
                 }
-            }
 
-            // Save Action Button
-            Button(
-                onClick = {
-                    val amountMinor = ((amountText.toDoubleOrNull() ?: 0.0) * 100).toLong()
-                    val cashbackMinor = ((cashbackText.toDoubleOrNull() ?: 0.0) * 100).toLong()
-                    val feeAmount = transferFeeText.toDoubleOrNull()
-                    val feeMinor = ((feeAmount ?: 0.0) * 100).toLong()
-                    val validationMessage = when {
-                        amountMinor <= 0 -> "Enter an amount greater than zero"
-                        transferMode && transferFeeText.isNotBlank() && (feeAmount == null || feeAmount < 0) -> "Enter a valid transfer fee"
-                        state.accounts.none { it.id == accountId } -> "Choose an account"
-                        !transferMode && selectedCategoryName.isBlank() -> "Choose a category"
-                        transferMode && state.accounts.none { it.id == destinationAccountId && it.id != accountId } ->
-                            "Choose a different destination account"
-                        transferMode && onTransfer == null -> "Transfers are unavailable right now"
-                        else -> null
-                    }
-                    if (validationMessage != null) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        coroutineScope.launch { snackbarController.show(validationMessage) }
-                        coroutineScope.launch {
-                            saveShake.snapTo(0f)
-                            listOf(-10f, 10f, -7f, 7f, -3f, 3f, 0f).forEach { offset ->
-                                saveShake.animateTo(
-                                    targetValue = offset,
-                                    animationSpec = tween(28, easing = FastOutSlowInEasing)
-                                )
-                            }
+                // Save Action Button
+                Button(
+                    onClick = {
+                        val amountMinor = ((amountText.toDoubleOrNull() ?: 0.0) * 100).toLong()
+                        val cashbackMinor = ((cashbackText.toDoubleOrNull() ?: 0.0) * 100).toLong()
+                        val feeAmount = transferFeeText.toDoubleOrNull()
+                        val feeMinor = ((feeAmount ?: 0.0) * 100).toLong()
+                        val validationMessage = when {
+                            amountMinor <= 0 -> "Enter an amount greater than zero"
+                            transferMode && transferFeeText.isNotBlank() && (feeAmount == null || feeAmount < 0) -> "Enter a valid transfer fee"
+                            state.accounts.none { it.id == accountId } -> "Choose an account"
+                            !transferMode && selectedCategoryName.isBlank() -> "Choose a category"
+                            transferMode && state.accounts.none { it.id == destinationAccountId && it.id != accountId } ->
+                                "Choose a different destination account"
+                            transferMode && onTransfer == null -> "Transfers are unavailable right now"
+                            else -> null
                         }
-                        return@Button
-                    }
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    if (transferMode) {
-                        onTransfer?.invoke(title, amountMinor, accountId, destinationAccountId, note, feeMinor)
-                    } else {
-                        onSave(
-                            title.ifBlank { selectedCategoryName },
-                            amountMinor,
-                            kind,
-                            selectedCategoryName,
-                            accountId,
-                            note,
-                            cashbackMinor
-                        )
-                    }
-                    dismiss()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .height(46.dp)
-                    .graphicsLayer { translationX = saveShake.value },
-                colors = ButtonDefaults.buttonColors(containerColor = WalletBeige),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text(
-                    text = if (isEditing) "Update Transaction" else {
-                        "Save ${if (transferMode) "Transfer" else kind.name.lowercase().replaceFirstChar { it.uppercase() }}"
+                        if (validationMessage != null) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            coroutineScope.launch { snackbarController.show(validationMessage) }
+                            coroutineScope.launch {
+                                saveShake.snapTo(0f)
+                                listOf(-10f, 10f, -7f, 7f, -3f, 3f, 0f).forEach { offset ->
+                                    saveShake.animateTo(
+                                        targetValue = offset,
+                                        animationSpec = tween(28, easing = FastOutSlowInEasing)
+                                    )
+                                }
+                            }
+                            return@Button
+                        }
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (transferMode) {
+                            onTransfer?.invoke(title, amountMinor, accountId, destinationAccountId, note, feeMinor)
+                        } else {
+                            onSave(
+                                title.ifBlank { selectedCategoryName },
+                                amountMinor,
+                                kind,
+                                selectedCategoryName,
+                                accountId,
+                                note,
+                                cashbackMinor
+                            )
+                        }
+                        dismiss()
                     },
-                    color = WalletColors.ink,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .height(46.dp)
+                        .graphicsLayer { translationX = saveShake.value },
+                    colors = ButtonDefaults.buttonColors(containerColor = WalletBeige),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        text = if (isEditing) "Update Transaction" else {
+                            "Save ${if (transferMode) "Transfer" else kind.name.lowercase().replaceFirstChar { it.uppercase() }}"
+                        },
+                        color = WalletColors.ink,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
             }
-          }
-          WalletSnackbarHost(
-              modifier = Modifier
-                  .align(Alignment.BottomCenter)
-                  .fillMaxWidth()
-                  .padding(horizontal = 16.dp, vertical = 76.dp)
-          )
+            WalletSnackbarHost(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 76.dp)
+            )
         }
     }
 

@@ -13,6 +13,7 @@ composeBom = "2024.09.00"
 room = "2.8.5"
 koin = "4.1.1"
 backdrop = "2.0.1"
+lottie = "6.7.1"
 ksp = "2.3.12"
 
 [libraries]
@@ -40,6 +41,7 @@ koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = 
 koin-compose = { group = "io.insert-koin", name = "koin-compose", version.ref = "koin" }
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
 kyant-backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
+lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

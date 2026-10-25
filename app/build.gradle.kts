@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.koin.compose)
     implementation(libs.koin.androidx.compose)
     implementation(libs.kyant.backdrop)
+    implementation(libs.lottie.compose)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

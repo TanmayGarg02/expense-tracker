@@ -15,6 +15,7 @@ interface WalletDao {
     @Query("SELECT * FROM ipos ORDER BY allotmentDateMillis") fun ipos(): Flow<List<IpoEntity>>
     @Query("SELECT * FROM fixed_deposits ORDER BY maturityDateMillis") fun fixedDeposits(): Flow<List<FixedDepositEntity>>
     @Query("SELECT * FROM notes ORDER BY id DESC") fun notes(): Flow<List<NoteEntity>>
+    @Query("SELECT EXISTS(SELECT 1 FROM notes WHERE LOWER(TRIM(text)) = LOWER(TRIM(:text)))") suspend fun hasNote(text: String): Boolean
     @Query("SELECT * FROM categories ORDER BY parentId, name") fun categories(): Flow<List<CategoryEntity>>
     @Query("SELECT * FROM categories WHERE id = :id") suspend fun category(id: String): CategoryEntity?
     @Query("SELECT * FROM settings WHERE id = 1") fun settings(): Flow<SettingsEntity?>
