@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,8 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.walletmanager.data.model.Account
+import com.example.walletmanager.data.model.Currency
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.TransactionKind
@@ -46,10 +50,13 @@ import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.debounceClickable
 import com.example.walletmanager.ui.component.formatMoney
+import com.example.walletmanager.ui.component.AmountGroupingVisualTransformation
 import com.example.walletmanager.ui.theme.WalletGreen
 import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.component.rememberDebouncedClick
 import com.example.walletmanager.ui.theme.WalletSurface
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -180,8 +187,13 @@ fun AccountDetailScreen(
     val selectedAccount = account
     if (selectedAccount != null) {
         if (showAccountEditor) {
+            val linkedFdPrincipal = state.fixedDeposits
+                .filter { it.accountId == selectedAccount.id }
+                .sumOf { it.principalMinor }
             AccountEditorSheet(
                 initial = selectedAccount,
+                linkedFdPrincipalMinor = linkedFdPrincipal,
+                currency = state.baseCurrency,
                 dismiss = { showAccountEditor = false },
                 save = {
                     editAccount(it)
@@ -242,13 +254,38 @@ fun AccountDetailScreen(
 @Composable
 private fun AccountEditorSheet(
     initial: Account,
+    linkedFdPrincipalMinor: Long,
+    currency: Currency,
     dismiss: () -> Unit,
     save: (Account) -> Unit
 ) {
     var name by rememberSaveable { mutableStateOf(initial.name) }
     var type by rememberSaveable { mutableStateOf(initial.type) }
+    var balance by rememberSaveable {
+        mutableStateOf(((initial.balanceMinor - linkedFdPrincipalMinor).coerceAtLeast(0) / 100.0).toString())
+    }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    val decimalPattern = remember { Regex("\\d*(\\.\\d{0,2})?") }
     val saveAccount = rememberDebouncedClick {
-        save(initial.copy(name = name, type = type))
+        val balanceValue = balance.toBigDecimalOrNull()
+        when {
+            name.isBlank() -> validationError = "Enter a name for the account."
+            balanceValue == null || balanceValue < BigDecimal.ZERO ->
+                validationError = "Enter a valid account balance."
+            else -> runCatching {
+                val balanceMinor = balanceValue.movePointRight(2)
+                    .setScale(0, RoundingMode.HALF_UP).longValueExact()
+                save(initial.copy(
+                    name = name.trim(),
+                    type = type,
+                    balanceMinor = balanceMinor + linkedFdPrincipalMinor
+                ))
+            }.onFailure {
+                validationError = "Enter a valid account balance."
+            }.onSuccess {
+                validationError = null
+            }
+        }
     }
 
     WalletModalBottomSheet(
@@ -271,6 +308,19 @@ private fun AccountEditorSheet(
                 label = { Text("Account name") },
                 modifier = Modifier.fillMaxWidth()
             )
+            OutlinedTextField(
+                value = balance,
+                onValueChange = { if (it.matches(decimalPattern)) balance = it },
+                label = { Text("Bank balance") },
+                prefix = { Text("₹ ") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                visualTransformation = AmountGroupingVisualTransformation(currency),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "Fixed deposits linked to this account are counted separately in its total.",
+                color = WalletColors.muted
+            )
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -289,6 +339,7 @@ private fun AccountEditorSheet(
                     color = WalletColors.muted
                 )
             }
+            validationError?.let { Text(it, color = WalletColors.red, fontSize = 12.sp) }
             Button(
                 onClick = saveAccount,
                 enabled = name.isNotBlank(),

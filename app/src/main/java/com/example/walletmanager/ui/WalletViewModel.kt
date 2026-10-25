@@ -107,8 +107,8 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         )
     }
 
-    fun addAccount(name: String, type: String) = launchAction {
-        repository.addAccount(name, type)
+    fun addAccount(name: String, type: String, openingBalanceMinor: Long) = launchAction {
+        repository.addAccount(name, type, openingBalanceMinor)
     }
 
     fun addBrokeragePlatform(name: String, openingBalanceMinor: Long) = launchAction {

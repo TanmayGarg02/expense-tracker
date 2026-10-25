@@ -160,7 +160,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     maturityDate = it.maturityDate,
                     maturityDateMillis = it.maturityDateMillis,
                     maturityAmountMinor = it.maturityAmountMinor,
-                    accountId = it.accountId
+                    accountId = it.accountId,
+                    startDate = it.startDate
                 )
             },
             notes = notes.map { it.text },
@@ -418,12 +419,16 @@ class WalletRepository(private val database: WalletDatabase) {
     suspend fun editAccount(account: Account) {
         if (account.name.isBlank()) return
 
+        val linkedFdPrincipal = dao.fixedDeposits().first()
+            .filter { it.accountId == account.id }
+            .sumOf { it.principalMinor }
+
         dao.insertAccount(
             AccountEntity(
                 id = account.id,
                 name = account.name,
                 type = account.type,
-                balanceMinor = account.balanceMinor,
+                balanceMinor = (account.balanceMinor - linkedFdPrincipal).coerceAtLeast(0),
                 accent = account.accent.name
             )
         )
@@ -870,7 +875,8 @@ class WalletRepository(private val database: WalletDatabase) {
                 maturityDate = deposit.maturityDate,
                 maturityDateMillis = deposit.maturityDateMillis,
                 maturityAmountMinor = deposit.maturityAmountMinor,
-                accountId = deposit.accountId
+                accountId = deposit.accountId,
+                startDate = deposit.startDate
             )
         )
     }

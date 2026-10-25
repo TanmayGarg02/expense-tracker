@@ -75,6 +75,7 @@ import com.example.walletmanager.ui.component.WalletPage
 import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.formatMoney
+import com.example.walletmanager.ui.component.AmountGroupingVisualTransformation
 import com.example.walletmanager.ui.component.walletDropdownItem
 import com.example.walletmanager.ui.component.walletDropdownSurface
 import com.example.walletmanager.ui.component.rememberDebouncedClick
@@ -100,7 +101,7 @@ private fun BigDecimal.toMinorUnits(): Long =
 fun AccountsScreen(
     state: WalletUiState,
     open: (WalletRoute) -> Unit,
-    addAccount: (String, String) -> Unit,
+    addAccount: (String, String, Long) -> Unit,
     addFixedDeposit: (FixedDeposit) -> Unit,
     editFixedDeposit: (FixedDeposit) -> Unit,
     deleteFixedDeposit: (FixedDeposit) -> Unit
@@ -221,9 +222,10 @@ fun AccountsScreen(
 
     if (showAddSheet) {
         AddAccountSheet(
+            currency = state.baseCurrency,
             dismiss = { showAddSheet = false },
-            save = { name, type ->
-                addAccount(name, type)
+            save = { name, type, openingBalanceMinor ->
+                addAccount(name, type, openingBalanceMinor)
                 showAddSheet = false
             }
         )
@@ -258,13 +260,29 @@ fun AccountsScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddAccountSheet(
+    currency: com.example.walletmanager.data.model.Currency,
     dismiss: () -> Unit,
-    save: (String, String) -> Unit
+    save: (String, String, Long) -> Unit
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("Bank account") }
+    var openingBalance by rememberSaveable { mutableStateOf("") }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    val decimalPattern = remember { Regex("\\d*(\\.\\d{0,2})?") }
     val saveAccount = rememberDebouncedClick {
-        save(name, type)
+        val balanceValue = openingBalance.toBigDecimalOrNull()
+        when {
+            name.isBlank() -> validationError = "Enter a name for the account."
+            balanceValue == null || balanceValue < BigDecimal.ZERO ->
+                validationError = "Enter a valid current balance."
+            else -> runCatching {
+                save(name.trim(), type, balanceValue.toMinorUnits())
+            }.onFailure {
+                validationError = "Enter a valid current balance."
+            }.onSuccess {
+                validationError = null
+            }
+        }
     }
 
     WalletModalBottomSheet(
@@ -287,6 +305,15 @@ private fun AddAccountSheet(
                 label = { Text("Account name") },
                 modifier = Modifier.fillMaxWidth()
             )
+            OutlinedTextField(
+                value = openingBalance,
+                onValueChange = { if (it.matches(decimalPattern)) openingBalance = it },
+                label = { Text("Current balance") },
+                prefix = { Text("₹ ") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                visualTransformation = AmountGroupingVisualTransformation(currency),
+                modifier = Modifier.fillMaxWidth()
+            )
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -305,6 +332,7 @@ private fun AddAccountSheet(
                     color = WalletColors.muted
                 )
             }
+            validationError?.let { Text(it, color = WalletColors.red, fontSize = 12.sp) }
             Button(
                 onClick = saveAccount,
                 enabled = name.isNotBlank(),
@@ -433,7 +461,7 @@ private fun FixedDepositRow(
                 }
             }
             Text(
-                "${deposit.interestRateBps / 100.0}% · Matures ${deposit.maturityDate}",
+                "${deposit.interestRateBps / 100.0}% · Deposited ${deposit.startDate} · Matures ${deposit.maturityDate}",
                 color = WalletColors.muted
             )
             Text(
@@ -478,25 +506,30 @@ private fun FixedDepositSheet(
     var interestRate by rememberSaveable {
         mutableStateOf(initial?.interestRateBps?.div(100.0)?.toString().orEmpty())
     }
+    var startDate by rememberSaveable {
+        mutableStateOf(initial?.startDate?.takeIf { it.isNotBlank() } ?: LocalDate.now().toString())
+    }
     var maturityDate by rememberSaveable {
         mutableStateOf(initial?.maturityDate ?: LocalDate.now().plusYears(1).toString())
     }
     var maturityAmount by rememberSaveable {
         mutableStateOf(initial?.maturityAmountMinor?.div(100.0)?.toString().orEmpty())
     }
-    var userModifiedMaturity by rememberSaveable { mutableStateOf(initial != null) }
+    var userModifiedMaturity by rememberSaveable { mutableStateOf(false) }
     var accountDropdownExpanded by remember { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     val decimalPattern = remember { Regex("\\d*(\\.\\d{0,2})?") }
 
     val selectedAccount = state.accounts.firstOrNull { it.id == accountId }
 
-    fun updateCalculatedMaturity(pStr: String, rStr: String, dStr: String) {
+    fun updateCalculatedMaturity(pStr: String, rStr: String, startStr: String, maturityStr: String) {
         if (!userModifiedMaturity) {
             val pMinor = ((pStr.toDoubleOrNull() ?: 0.0) * 100).toLong()
             val rBps = ((rStr.toDoubleOrNull() ?: 0.0) * 100).roundToInt()
-            if (pMinor > 0 && rBps >= 0 && dStr.isNotBlank()) {
-                val calcMinor = calculateFixedDepositMaturity(pMinor, rBps, dStr)
+            val parsedStart = runCatching { LocalDate.parse(startStr) }.getOrNull()
+            val parsedMaturity = runCatching { LocalDate.parse(maturityStr) }.getOrNull()
+            if (pMinor > 0 && rBps >= 0 && parsedStart != null && parsedMaturity != null && !parsedMaturity.isBefore(parsedStart)) {
+                val calcMinor = calculateFixedDepositMaturity(pMinor, rBps, parsedMaturity.toString(), parsedStart.toString())
                 maturityAmount = (calcMinor / 100.0).toString()
             }
         }
@@ -506,6 +539,7 @@ private fun FixedDepositSheet(
         val principalValue = principal.toBigDecimalOrNull()
         val interestValue = interestRate.toBigDecimalOrNull()
         val maturityValue = maturityAmount.toBigDecimalOrNull()
+        val parsedStartDate = runCatching { LocalDate.parse(startDate) }.getOrNull()
         val parsedDate = runCatching { LocalDate.parse(maturityDate) }.getOrNull()
         when {
             name.isBlank() -> validationError = "Enter a name for the fixed deposit."
@@ -513,9 +547,11 @@ private fun FixedDepositSheet(
                 validationError = "Principal amount must be a number greater than 0."
             interestValue == null || interestValue < BigDecimal.ZERO ->
                 validationError = "Interest rate must be a valid number (0 or more)."
+            parsedStartDate == null -> validationError = "Enter a valid deposit date (YYYY-MM-DD)."
             maturityValue == null || maturityValue <= BigDecimal.ZERO ->
                 validationError = "Maturity amount must be a number greater than 0."
             parsedDate == null -> validationError = "Enter a valid maturity date (YYYY-MM-DD)."
+            parsedDate.isBefore(parsedStartDate) -> validationError = "Maturity date must be on or after the deposit date."
             else -> {
                 runCatching {
                     val principalMinor = principalValue.toMinorUnits()
@@ -525,7 +561,8 @@ private fun FixedDepositSheet(
                     val calculatedAmount = calculateFixedDepositMaturity(
                         principalMinor,
                         interestRateBps,
-                        parsedDate.toString()
+                        parsedDate.toString(),
+                        parsedStartDate.toString()
                     )
                     validationError = null
                     save(
@@ -540,7 +577,8 @@ private fun FixedDepositSheet(
                                 .toInstant()
                                 .toEpochMilli(),
                             maturityAmountMinor = enteredAmount.takeIf { it > 0 } ?: calculatedAmount,
-                            accountId = accountId
+                            accountId = accountId,
+                            startDate = parsedStartDate.toString()
                         )
                     )
                 }.onFailure {
@@ -611,16 +649,26 @@ private fun FixedDepositSheet(
             }
 
             OutlinedTextField(
+                value = startDate,
+                onValueChange = {
+                    startDate = it
+                    updateCalculatedMaturity(principal, interestRate, it, maturityDate)
+                },
+                label = { Text("Deposit date (YYYY-MM-DD)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
                 value = principal,
                 onValueChange = {
                     if (it.matches(decimalPattern)) {
                         principal = it
-                        updateCalculatedMaturity(it, interestRate, maturityDate)
+                        updateCalculatedMaturity(it, interestRate, startDate, maturityDate)
                     }
                 },
                 label = { Text("Principal amount") },
                 prefix = { Text("₹ ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                visualTransformation = AmountGroupingVisualTransformation(state.baseCurrency),
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -628,7 +676,7 @@ private fun FixedDepositSheet(
                 onValueChange = {
                     if (it.matches(decimalPattern)) {
                         interestRate = it
-                        updateCalculatedMaturity(principal, it, maturityDate)
+                        updateCalculatedMaturity(principal, it, startDate, maturityDate)
                     }
                 },
                 label = { Text("Annual interest rate") },
@@ -640,7 +688,7 @@ private fun FixedDepositSheet(
                 value = maturityDate,
                 onValueChange = {
                     maturityDate = it
-                    updateCalculatedMaturity(principal, interestRate, it)
+                    updateCalculatedMaturity(principal, interestRate, startDate, it)
                 },
                 label = { Text("Maturity date (YYYY-MM-DD)") },
                 modifier = Modifier.fillMaxWidth()
@@ -656,13 +704,14 @@ private fun FixedDepositSheet(
                 label = { Text("Maturity amount (editable for tax/discrepancies)") },
                 prefix = { Text("₹ ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                visualTransformation = AmountGroupingVisualTransformation(state.baseCurrency),
                 modifier = Modifier.fillMaxWidth()
             )
             validationError?.let {
                 Text(it, color = WalletColors.red, fontSize = 12.sp)
             }
             Text(
-                "FD amount is automatically added to the linked bank account's total balance.",
+                "FD principal is included in the linked account's total balance.",
                 color = WalletColors.muted
             )
             Button(

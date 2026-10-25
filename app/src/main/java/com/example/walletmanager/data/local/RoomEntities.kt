@@ -1,6 +1,7 @@
 package com.example.walletmanager.data.local
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "accounts")
@@ -60,7 +61,8 @@ data class FixedDepositEntity(
     val maturityDate: String,
     val maturityDateMillis: Long,
     val maturityAmountMinor: Long,
-    val accountId: String = ""
+    val accountId: String = "",
+    @ColumnInfo(defaultValue = "''") val startDate: String = ""
 )
 
 @Entity(tableName = "notes")

@@ -126,7 +126,8 @@ data class FixedDeposit(
     val maturityDate: String,
     val maturityDateMillis: Long,
     val maturityAmountMinor: Long,
-    val accountId: String = ""
+    val accountId: String = "",
+    val startDate: String = ""
 )
 
 fun calculateFixedDepositMaturity(
