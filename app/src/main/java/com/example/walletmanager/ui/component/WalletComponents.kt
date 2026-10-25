@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -147,8 +148,8 @@ object WalletColors {
     val divider = WalletDivider
 }
 
-private val WalletMenuShape = RoundedCornerShape(18.dp)
-private val WalletMenuItemShape = RoundedCornerShape(12.dp)
+private val WalletMenuShape = RoundedCornerShape(24.dp)
+private val WalletMenuItemShape = RoundedCornerShape(18.dp)
 val WalletPageBackgroundBrush = Brush.verticalGradient(
     listOf(
         Color(0xFF12151A),
@@ -190,15 +191,16 @@ fun Modifier.walletGlassSurface(shape: RoundedCornerShape): Modifier =
 
 fun Modifier.walletDropdownSurface(): Modifier =
     shadow(10.dp, WalletMenuShape)
+        .widthIn(max = 280.dp)
         .clip(WalletMenuShape)
-        .background(WalletSurface.copy(alpha = 0.76f))
+        .background(WalletSurface.copy(alpha = 0.96f))
         .border(1.dp, WalletColors.cream.copy(alpha = 0.28f), WalletMenuShape)
 
-fun Modifier.walletDropdownItem(): Modifier =
-    padding(horizontal = 8.dp, vertical = 4.dp)
+fun Modifier.walletDropdownItem(selected: Boolean = false, accent: Color = WalletColors.cream): Modifier =
+    padding(horizontal = 4.dp, vertical = 2.dp)
         .clip(WalletMenuItemShape)
-        .background(WalletBackground.copy(alpha = 0.35f))
-        .border(1.dp, WalletColors.cream.copy(alpha = 0.12f), WalletMenuItemShape)
+        .background(if (selected) accent.copy(alpha = 0.92f) else WalletBackground.copy(alpha = 0.35f))
+        .border(1.dp, if (selected) accent else WalletColors.cream.copy(alpha = 0.12f), WalletMenuItemShape)
 
 data class ProfileHeaderState(
     val name: String = "Alex",

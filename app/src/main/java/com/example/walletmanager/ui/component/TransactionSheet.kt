@@ -20,12 +20,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +57,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +68,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -89,6 +98,7 @@ import com.example.walletmanager.ui.theme.WalletAmber
 import com.example.walletmanager.ui.theme.WalletBeige
 import com.example.walletmanager.ui.theme.WalletSurfaceVariant
 import com.example.walletmanager.ui.theme.WalletDivider
+import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.LocalDate
@@ -176,12 +186,30 @@ fun TransactionSheet(
     var confirmTransactionDelete by rememberSaveable { mutableStateOf(false) }
     var activePanel by rememberSaveable { mutableStateOf("category") }
     var transferMode by rememberSaveable { mutableStateOf(initialTransfer) }
+    var noteFocused by remember { mutableStateOf(false) }
+    val noteBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(activePanel) {
+        if (activePanel != "note") {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
+    }
+
+    LaunchedEffect(note, noteFocused, state.notes) {
+        if (noteFocused && note.isNotBlank()) {
+            noteBringIntoViewRequester.bringIntoView()
+        }
+    }
 
     val activeColor = when {
         transferMode -> AmberAccent
         kind == TransactionKind.EXPENSE -> RedAccent
         else -> GreenAccent
     }
+    val panelMinHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
     val compactInputStyle = MaterialTheme.typography.bodySmall.copy(
         fontSize = 13.sp,
         lineHeight = 18.sp
@@ -196,20 +224,21 @@ fun TransactionSheet(
 
     WalletModalBottomSheet(
         onDismissRequest = dismiss,
+        modifier = Modifier.statusBarsPadding(),
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         sheetState = sheetState,
         containerColor = ScreenBg
     ) {
-        val categoryPanelExpanded = showCategoryPanel && activePanel == "category"
         Box(
             Modifier
                 .fillMaxWidth()
-                .then(if (categoryPanelExpanded) Modifier.fillMaxHeight() else Modifier.wrapContentHeight())
+                .fillMaxHeight()
+                .imePadding()
         ) {
           Column(
               modifier = Modifier
                   .fillMaxWidth()
-                  .then(if (categoryPanelExpanded) Modifier.fillMaxHeight() else Modifier.wrapContentHeight())
+                  .fillMaxHeight()
                   .background(ScreenBg)
           ) {
             // Top Navigation Bar
@@ -308,7 +337,9 @@ fun TransactionSheet(
             // Form Rows (Date, Amount, Category, Account, Note)
             Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 3.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -329,7 +360,13 @@ fun TransactionSheet(
                         modifier = Modifier.width(72.dp)
                     )
                     Text(
-                        text = dateText,
+                        text = runCatching {
+                            val parsed = LocalDateTime.parse(
+                                dateText,
+                                DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
+                            )
+                            "${formatWalletDate(parsed.toLocalDate())} · ${parsed.format(DateTimeFormatter.ofPattern("h:mm a"))}"
+                        }.getOrDefault(dateText),
                         color = CreamText,
                         fontSize = 13.sp,
                         modifier = Modifier.weight(1f)
@@ -342,6 +379,8 @@ fun TransactionSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
                             activePanel = "amount"
                             showCategoryPanel = true
                         },
@@ -467,12 +506,15 @@ fun TransactionSheet(
                         ) {
                             state.accounts.forEach { acc ->
                                 DropdownMenuItem(
-                                    modifier = Modifier.walletDropdownItem(),
+                                    modifier = Modifier.walletDropdownItem(
+                                        selected = acc.id == accountId,
+                                        accent = if (kind == TransactionKind.INCOME) GreenAccent else RedAccent
+                                    ),
                                     text = {
                                         Text(
                                             "${acc.name} · ${formatMoney(acc.balanceMinor, true, state.baseCurrency)}",
                                             fontSize = 12.sp,
-                                            color = CreamText
+                                            color = if (acc.id == accountId && kind == TransactionKind.INCOME) ScreenBg else CreamText
                                         )
                                     },
                                     onClick = {
@@ -531,8 +573,11 @@ fun TransactionSheet(
                                     .filter { it.id != accountId }
                                     .forEach { acc ->
                                         DropdownMenuItem(
-                                            modifier = Modifier.walletDropdownItem(),
-                                            text = { Text(acc.name, color = CreamText) },
+                                            modifier = Modifier.walletDropdownItem(
+                                                selected = acc.id == destinationAccountId,
+                                                accent = if (kind == TransactionKind.INCOME) GreenAccent else RedAccent
+                                            ),
+                                            text = { Text(acc.name, color = if (acc.id == destinationAccountId && kind == TransactionKind.INCOME) ScreenBg else CreamText) },
                                             onClick = {
                                                 destinationAccountId = acc.id
                                                 destinationAccountMenu = false
@@ -583,52 +628,14 @@ fun TransactionSheet(
                     }
                 }
 
-                // Note Row
-                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Note",
-                        color = MutedText,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(72.dp)
-                    )
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = { note = it },
-                        textStyle = compactInputStyle,
-                        placeholder = {
-                            Text("Write note...", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
-                        },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = activeColor,
-                            unfocusedBorderColor = LineColor,
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedTextColor = CreamText,
-                            unfocusedTextColor = CreamText
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .onFocusChanged {
-                                if (it.isFocused) {
-                                    activePanel = "note"
-                                    showCategoryPanel = true
-                                }
-                            }
-                    )
-                }
-
                 if (kind == TransactionKind.EXPENSE) {
                     HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
                                 activePanel = "cashback"
                                 showCategoryPanel = true
                             },
@@ -669,19 +676,101 @@ fun TransactionSheet(
                         }
                     }
                 }
+
+                // Keep the note field last so it can sit directly above the keyboard while editing.
+                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = "Note",
+                        color = MutedText,
+                        fontSize = 13.sp,
+                        modifier = Modifier.width(72.dp).padding(top = 14.dp)
+                    )
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .bringIntoViewRequester(noteBringIntoViewRequester)
+                    ) {
+                        OutlinedTextField(
+                            value = note,
+                            onValueChange = { note = it },
+                            textStyle = compactInputStyle,
+                            placeholder = {
+                                Text("Write note...", color = MutedText.copy(alpha = 0.4f), fontSize = 13.sp, lineHeight = 18.sp)
+                            },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = if (activePanel == "note") activeColor else LineColor,
+                                unfocusedBorderColor = LineColor,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedTextColor = CreamText,
+                                unfocusedTextColor = CreamText
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .onFocusChanged { focusState ->
+                                    noteFocused = focusState.isFocused
+                                    if (focusState.isFocused) {
+                                        activePanel = "note"
+                                        showCategoryPanel = false
+                                    }
+                                }
+                        )
+                        val matchingNotes = remember(state.notes, note) {
+                            if (note.isBlank()) emptyList()
+                            else state.notes
+                                .filter { it.text.contains(note, ignoreCase = true) }
+                                .map { it.text }
+                        }
+                        if (noteFocused && matchingNotes.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 160.dp)
+                                    .padding(top = 6.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(WalletSurfaceVariant)
+                                    .border(1.dp, WalletBeige.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    text = "Saved note suggestions · ${matchingNotes.size}",
+                                    color = WalletBeige,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                                )
+                                HorizontalDivider(color = LineColor.copy(alpha = 0.7f), thickness = 0.5.dp)
+                                matchingNotes.forEach { matchingNote ->
+                                    DropdownMenuItem(
+                                        text = { Text(matchingNote, color = CreamText, fontSize = 13.sp) },
+                                        onClick = {
+                                            note = matchingNote
+                                            noteFocused = false
+                                            focusManager.clearFocus(force = true)
+                                            keyboardController?.hide()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(4.dp))
 
             // Bottom Category Split Panel
-            if (showCategoryPanel) {
+            if (showCategoryPanel && activePanel != "note") {
                 Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(
-                        if (activePanel == "category") Modifier.weight(1f)
-                        else Modifier.wrapContentHeight()
-                    )
+                    .height(panelMinHeight)
                     .background(CategoryPanelBg)
                 ) {
                     // Panel Header Bar
@@ -698,7 +787,7 @@ fun TransactionSheet(
                                 "date" -> "Choose date"
                                 "amount" -> "Enter amount"
                                 "cashback" -> "Enter cashback"
-                                "note" -> "Previous notes"
+                                "note" -> ""
                                 else -> "Category"
                             },
                             color = CreamText,
@@ -728,10 +817,7 @@ fun TransactionSheet(
                     AnimatedContent(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(
-                                if (activePanel == "category") Modifier.weight(1f)
-                                else Modifier.wrapContentHeight()
-                            ),
+                            .weight(1f),
                         targetState = activePanel,
                         transitionSpec = {
                             (fadeIn(tween(90, easing = FastOutSlowInEasing)) +
@@ -860,8 +946,18 @@ fun TransactionSheet(
                         }
                     } else {
                         when (panel) {
-                            "date" -> DatePanel { selectedDate ->
-                                dateText = selectedDate
+                            "date" -> DatePanel(
+                                initialDate = runCatching {
+                                    LocalDateTime.parse(
+                                        dateText,
+                                        DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
+                                    ).toLocalDate()
+                                }.getOrDefault(LocalDate.now())
+                            ) { selectedDate ->
+                                dateText = selectedDate.atTime(LocalTime.now()).format(
+                                    DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
+                                )
+                                activePanel = "category"
                             }
                             "amount" -> NumberPad(
                                 value = amountText,
@@ -873,10 +969,7 @@ fun TransactionSheet(
                                 onValueChange = { cashbackText = it },
                                 onDone = { activePanel = "category" }
                             )
-                            "note" -> NotePanel(
-                                notes = state.notes,
-                                onSelect = { note = it }
-                            )
+                            "note" -> Unit
                         }
                     }
                     }
@@ -1024,53 +1117,8 @@ fun TransactionSheet(
 }
 
 @Composable
-private fun DatePanel(onSelect: (String) -> Unit) {
-    val month = remember { YearMonth.now() }
-    val days = remember(month) {
-        val leading = month.atDay(1).dayOfWeek.value - 1
-        List(leading) { null } + (1..month.lengthOfMonth()).map { month.atDay(it) }
-    }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            "${month.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${month.year}",
-            color = CreamText,
-            fontWeight = FontWeight.Bold
-        )
-        days.chunked(7).forEach { week ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                week.forEach { date ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (date == LocalDate.now()) DarkCardBg else Color.Transparent)
-                            .clickable {
-                                date?.let {
-                                    onSelect(
-                                        it.atTime(LocalTime.now()).format(
-                                            DateTimeFormatter.ofPattern("dd/MM/yyyy (E) HH:mm")
-                                        )
-                                    )
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(date?.dayOfMonth?.toString().orEmpty(), color = CreamText)
-                    }
-                }
-                repeat(7 - week.size) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
+private fun DatePanel(initialDate: LocalDate, onSelect: (LocalDate) -> Unit) {
+    WalletCalendarPicker(initialDate = initialDate, onDateSelected = onSelect)
 }
 
 @Composable
@@ -1089,9 +1137,10 @@ private fun NumberPad(
     Column(
         Modifier
             .fillMaxWidth()
+            .fillMaxHeight()
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+        verticalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterVertically)
     ) {
         rows.forEach { row ->
             Row(
@@ -1131,27 +1180,6 @@ private fun NumberPad(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NotePanel(notes: List<String>, onSelect: (String) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (notes.isEmpty()) {
-            Text("Your previous notes will appear here.", color = MutedText)
-        } else {
-            notes.take(8).forEach { note ->
-                TextButton(onClick = { onSelect(note) }) {
-                    Text(note, color = CreamText)
                 }
             }
         }
