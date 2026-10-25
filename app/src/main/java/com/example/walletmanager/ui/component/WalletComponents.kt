@@ -88,6 +88,9 @@ import com.example.walletmanager.ui.theme.WalletSage
 import com.example.walletmanager.ui.theme.WalletBlack
 import com.example.walletmanager.ui.theme.WalletButtonInk
 import androidx.compose.ui.text.font.FontFamily
+import java.math.RoundingMode
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.Locale
 import kotlinx.coroutines.launch
 
@@ -211,7 +214,11 @@ fun formatMoney(
 ) = if (!visible) {
     "••••"
 } else {
-    currency.symbol + String.format(Locale.US, "%,.2f", minor / 100.0 * currency.inrRate)
+    val pattern = if (currency == Currency.INR) "#,##,##0.00" else "#,##0.00"
+    val formatter = DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).apply {
+        roundingMode = RoundingMode.HALF_UP
+    }
+    currency.symbol + formatter.format(minor / 100.0 * currency.inrRate)
 }
 
 @Composable

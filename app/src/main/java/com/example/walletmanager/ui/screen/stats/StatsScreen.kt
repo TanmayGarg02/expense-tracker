@@ -37,6 +37,7 @@ import java.util.Locale
 import com.example.walletmanager.data.model.Transaction
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.TransactionKind
+import com.example.walletmanager.data.model.Currency
 import com.example.walletmanager.data.model.WalletUiState
 import com.example.walletmanager.ui.component.ScreenHeader
 import com.example.walletmanager.ui.component.SectionTitle
@@ -295,11 +296,20 @@ private fun compactAmount(amountMinor: Long, state: WalletUiState): String {
     if (!state.balancesVisible) return "•••"
     val amount = amountMinor / 100.0 * state.baseCurrency.inrRate
     val absolute = kotlin.math.abs(amount)
-    val (scaled, suffix) = when {
-        absolute >= 10_000_000 -> amount / 10_000_000 to "Cr"
-        absolute >= 100_000 -> amount / 100_000 to "L"
-        absolute >= 1_000 -> amount / 1_000 to "K"
-        else -> amount to ""
+    val (scaled, suffix) = if (state.baseCurrency == Currency.INR) {
+        when {
+            absolute >= 10_000_000 -> amount / 10_000_000 to "Cr"
+            absolute >= 100_000 -> amount / 100_000 to "L"
+            absolute >= 1_000 -> amount / 1_000 to "K"
+            else -> amount to ""
+        }
+    } else {
+        when {
+            absolute >= 1_000_000_000 -> amount / 1_000_000_000 to "B"
+            absolute >= 1_000_000 -> amount / 1_000_000 to "M"
+            absolute >= 1_000 -> amount / 1_000 to "K"
+            else -> amount to ""
+        }
     }
     val digits = if (suffix.isEmpty() || kotlin.math.abs(scaled) >= 10) "%.0f" else "%.1f"
     val number = String.format(Locale.US, digits, scaled).removeSuffix(".0")
