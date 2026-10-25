@@ -127,6 +127,14 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         repository.addNote(note)
     }
 
+    fun editNote(id: Long, note: String) = launchAction {
+        repository.editNote(id, note)
+    }
+
+    fun deleteNote(id: Long) = launchAction {
+        repository.deleteNote(id)
+    }
+
     fun addCategory(name: String, parentId: String?) = launchAction {
         repository.addCategory(name, parentId)
     }
@@ -185,7 +193,9 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
         dueDay: Int = 5,
         investmentType: InvestmentType = InvestmentType.MUTUAL_FUND,
         investmentHoldingId: String? = null,
-        investmentPlatformAccountId: String? = null
+        investmentPlatformAccountId: String? = null,
+        startDate: String = "",
+        initialPaymentAlreadyLogged: Boolean? = null
     ) = launchAction {
         repository.addRecurringPayment(
             name,
@@ -197,12 +207,14 @@ class WalletViewModel(private val repository: WalletRepository) : ViewModel() {
             cashbackMinor,
             investmentType,
             investmentHoldingId,
-            investmentPlatformAccountId
+            investmentPlatformAccountId,
+            startDate,
+            initialPaymentAlreadyLogged
         )
     }
 
-    fun editRecurringPayment(payment: RecurringPayment) = launchAction {
-        repository.editRecurringPayment(payment)
+    fun editRecurringPayment(payment: RecurringPayment, initialPaymentAlreadyLogged: Boolean? = null) = launchAction {
+        repository.editRecurringPayment(payment, initialPaymentAlreadyLogged)
     }
 
     fun toggleRecurringPayment(payment: RecurringPayment) = launchAction {

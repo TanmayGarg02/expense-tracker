@@ -17,6 +17,7 @@ import com.example.walletmanager.data.model.Currency
 import com.example.walletmanager.data.model.Category
 import com.example.walletmanager.data.model.Holding
 import com.example.walletmanager.data.model.FixedDeposit
+import com.example.walletmanager.data.model.SavedNote
 import com.example.walletmanager.data.model.calculateFixedDepositMaturity
 import com.example.walletmanager.data.model.InvestmentType
 import com.example.walletmanager.data.model.PendingIpo
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.IsoFields
 
@@ -127,7 +129,8 @@ class WalletRepository(private val database: WalletDatabase) {
                     investmentType = runCatching { InvestmentType.valueOf(it.investmentType) }
                         .getOrDefault(InvestmentType.MUTUAL_FUND),
                     investmentHoldingId = it.investmentHoldingId,
-                    investmentPlatformAccountId = it.investmentPlatformAccountId
+                    investmentPlatformAccountId = it.investmentPlatformAccountId,
+                    startDate = it.startDate
                 )
             },
             holdings = holdings.map {
@@ -164,7 +167,7 @@ class WalletRepository(private val database: WalletDatabase) {
                     startDate = it.startDate
                 )
             },
-            notes = notes.map { it.text },
+            notes = notes.map { SavedNote(id = it.id, text = it.text) },
             categories = categories.map { Category(it.id, it.name, it.parentId) },
             baseCurrency = settings?.baseCurrency?.let { code -> Currency.entries.firstOrNull { it.code == code } } ?: Currency.INR,
             profileName = settings?.profileName?.ifBlank { "Alex" } ?: "Alex",
@@ -256,7 +259,7 @@ class WalletRepository(private val database: WalletDatabase) {
 
     suspend fun addSampleData(): Boolean {
         val sampleAccountId = "demo-account-main"
-        if (dao.account(sampleAccountId) != null) return false
+        if (dao.hasSampleData()) return false
 
         val today = LocalDate.now()
         val now = System.currentTimeMillis()
@@ -445,6 +448,14 @@ class WalletRepository(private val database: WalletDatabase) {
         if (note.isNotBlank()) {
             dao.insertNotes(listOf(NoteEntity(text = note)))
         }
+    }
+
+    suspend fun editNote(id: Long, note: String) {
+        if (note.isNotBlank()) dao.updateNote(id, note.trim())
+    }
+
+    suspend fun deleteNote(id: Long) {
+        dao.deleteNote(id)
     }
 
     suspend fun addCategory(name: String, parentId: String?) {
@@ -683,9 +694,20 @@ class WalletRepository(private val database: WalletDatabase) {
         cashbackMinor: Long,
         investmentType: InvestmentType,
         investmentHoldingId: String? = null,
-        investmentPlatformAccountId: String? = null
+        investmentPlatformAccountId: String? = null,
+        startDate: String = "",
+        initialPaymentAlreadyLogged: Boolean? = null
     ) {
         if (name.isBlank() || amountMinor <= 0 || dao.account(accountId) == null) return
+
+        val parsedStartDate = startDate.takeIf { it.isNotBlank() }
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val effectiveStartDate = parsedStartDate?.toString().orEmpty()
+        val pastStart = parsedStartDate?.isBefore(LocalDate.now()) == true
+        val effectiveDueDay = parsedStartDate?.let {
+            if (frequency == "Weekly") it.dayOfWeek.value else it.dayOfMonth
+        } ?: dueDay
+        val startPeriod = parsedStartDate?.let { recurringPeriod(it, frequency) }.orEmpty()
 
         val paymentId = "p${System.currentTimeMillis()}"
         val linkedHolding = investmentHoldingId
@@ -707,16 +729,17 @@ class WalletRepository(private val database: WalletDatabase) {
                 name = name,
                 amountMinor = amountMinor,
                 frequency = frequency,
-                due = "Day $dueDay",
+                due = "Day $effectiveDueDay",
                 accountId = accountId,
                 category = category,
                 active = true,
-                dueDay = dueDay,
-                lastProcessedPeriod = "",
+                dueDay = effectiveDueDay,
+                lastProcessedPeriod = if (pastStart) startPeriod else "",
                 cashbackMinor = cashbackMinor.coerceAtLeast(0),
                 investmentType = investmentType.name,
                 investmentHoldingId = linkedHoldingId,
-                investmentPlatformAccountId = platformAccountId
+                investmentPlatformAccountId = platformAccountId,
+                startDate = effectiveStartDate
             )
         )
         if (category == "Investments" && linkedHoldingId == null) {
@@ -733,10 +756,26 @@ class WalletRepository(private val database: WalletDatabase) {
                 )
             )
         }
+
+        if (pastStart && initialPaymentAlreadyLogged == false) {
+            val payment = dao.currentRecurringPayments().firstOrNull { it.id == paymentId }
+                ?: return
+            recordPastRecurringOccurrence(payment, parsedStartDate, startPeriod)
+        }
     }
 
-    suspend fun editRecurringPayment(p: RecurringPayment) {
+    suspend fun editRecurringPayment(p: RecurringPayment, initialPaymentAlreadyLogged: Boolean? = null) {
         if (p.name.isBlank() || p.amountMinor <= 0 || dao.account(p.accountId) == null) return
+
+        val previous = dao.currentRecurringPayments().firstOrNull { it.id == p.id }
+        val startDateChanged = previous?.startDate != p.startDate
+        val parsedStartDate = p.startDate.takeIf { it.isNotBlank() }
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val pastStart = startDateChanged && parsedStartDate?.isBefore(LocalDate.now()) == true
+        val startPeriod = parsedStartDate?.let { recurringPeriod(it, p.frequency) }.orEmpty()
+        val effectivePayment = if (startDateChanged) {
+            p.copy(lastProcessedPeriod = if (pastStart) startPeriod else "")
+        } else p
 
         val targetHolding = p.investmentHoldingId
             ?.takeIf { p.category == "Investments" }
@@ -754,20 +793,21 @@ class WalletRepository(private val database: WalletDatabase) {
 
         dao.insertRecurringPayment(
             RecurringPaymentEntity(
-                p.id,
-                p.name,
-                p.amountMinor,
-                p.frequency,
-                p.due,
-                p.accountId,
-                p.category,
-                p.active,
-                p.dueDay,
-                p.lastProcessedPeriod,
-                p.cashbackMinor,
-                p.investmentType.name,
+                effectivePayment.id,
+                effectivePayment.name,
+                effectivePayment.amountMinor,
+                effectivePayment.frequency,
+                effectivePayment.due,
+                effectivePayment.accountId,
+                effectivePayment.category,
+                effectivePayment.active,
+                effectivePayment.dueDay,
+                effectivePayment.lastProcessedPeriod,
+                effectivePayment.cashbackMinor,
+                effectivePayment.investmentType.name,
                 targetHolding?.id,
-                validPlatformAccountId.takeIf { p.category == "Investments" }
+                validPlatformAccountId.takeIf { p.category == "Investments" },
+                effectivePayment.startDate
             )
         )
         if (p.category == "Investments") {
@@ -797,6 +837,12 @@ class WalletRepository(private val database: WalletDatabase) {
         } else {
             dao.deleteRecurringPaymentHolding(p.id)
         }
+
+        if (pastStart && initialPaymentAlreadyLogged == false) {
+            val storedPayment = dao.currentRecurringPayments().firstOrNull { it.id == p.id }
+                ?: return
+            recordPastRecurringOccurrence(storedPayment, parsedStartDate, startPeriod)
+        }
     }
 
     suspend fun toggleRecurringPayment(p: RecurringPayment) = editRecurringPayment(p.copy(active = !p.active))
@@ -804,6 +850,74 @@ class WalletRepository(private val database: WalletDatabase) {
     suspend fun deleteRecurringPayment(id: String) {
         dao.deleteRecurringPaymentHolding(id)
         dao.deleteRecurringPayment(id)
+    }
+
+    private suspend fun recordPastRecurringOccurrence(
+        payment: RecurringPaymentEntity,
+        date: LocalDate,
+        period: String
+    ) {
+        val timestamp = System.currentTimeMillis()
+        dao.insertTransaction(
+            TransactionEntity(
+                id = "auto-${payment.id}-$period",
+                title = payment.name,
+                category = payment.category,
+                amountMinor = payment.amountMinor,
+                kind = TransactionKind.EXPENSE.name,
+                accountId = payment.accountId,
+                date = date.toString(),
+                weekOfMonth = ((date.dayOfMonth - 1) / 7 + 1).coerceAtMost(4),
+                note = "First payment from scheduled plan",
+                cashbackMinor = payment.cashbackMinor,
+                createdAt = timestamp
+            )
+        )
+        dao.adjustBalance(payment.accountId, -payment.amountMinor)
+        if (payment.cashbackMinor > 0) {
+            dao.insertTransaction(
+                TransactionEntity(
+                    id = "cashback-auto-${payment.id}-$period",
+                    title = "Cashback · ${payment.name}",
+                    category = "Cashback",
+                    amountMinor = payment.cashbackMinor,
+                    kind = TransactionKind.INCOME.name,
+                    accountId = payment.accountId,
+                    date = date.toString(),
+                    weekOfMonth = ((date.dayOfMonth - 1) / 7 + 1).coerceAtMost(4),
+                    note = "Automatically added cashback",
+                    createdAt = timestamp
+                )
+            )
+            dao.adjustBalance(payment.accountId, payment.cashbackMinor)
+        }
+        if (payment.category == "Investments") {
+            val investmentType = runCatching { InvestmentType.valueOf(payment.investmentType) }
+                .getOrDefault(InvestmentType.MUTUAL_FUND)
+            val holding = payment.investmentHoldingId?.let { dao.holding(it) }
+                ?: dao.holdingForRecurringPayment(payment.id)
+            dao.insertHolding(
+                holding?.copy(
+                    valueMinor = holding.valueMinor + payment.amountMinor,
+                    costMinor = holding.costMinor + payment.amountMinor
+                ) ?: HoldingEntity(
+                    id = "sip-${payment.id}",
+                    name = payment.name,
+                    type = investmentType.name,
+                    units = "Ongoing SIP",
+                    valueMinor = payment.amountMinor,
+                    costMinor = payment.amountMinor,
+                    recurringPaymentId = payment.id,
+                    platformAccountId = payment.investmentPlatformAccountId
+                )
+            )
+        }
+    }
+
+    private fun recurringPeriod(date: LocalDate, frequency: String): String = when (frequency) {
+        "Weekly" -> "${date.get(IsoFields.WEEK_BASED_YEAR)}-W${date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)}"
+        "Yearly" -> date.year.toString()
+        else -> "${date.year}-${date.monthValue}"
     }
 
     suspend fun addHolding(
@@ -947,16 +1061,26 @@ class WalletRepository(private val database: WalletDatabase) {
 
     suspend fun processDuePayments(today: LocalDate) {
         val due = dao.currentRecurringPayments().filter {
-            val period = when (it.frequency) {
-                "Weekly" -> "${today.year}-W${today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)}"
-                "Yearly" -> today.year.toString()
-                else -> "${today.year}-${today.monthValue}"
-            }
+            val startDate = it.startDate.takeIf(String::isNotBlank)
+                ?.let { value -> runCatching { LocalDate.parse(value) }.getOrNull() }
+            val period = recurringPeriod(today, it.frequency)
             val isDue = when (it.frequency) {
-                "Weekly" -> it.dueDay <= today.dayOfWeek.value
-                else -> it.dueDay <= today.dayOfMonth
+                "Weekly" -> (startDate?.dayOfWeek?.value ?: it.dueDay) <= today.dayOfWeek.value
+                "Yearly" -> if (startDate == null) {
+                    it.dueDay <= today.dayOfMonth
+                } else {
+                    val annualDate = LocalDate.of(
+                        today.year,
+                        startDate.month,
+                        startDate.dayOfMonth.coerceAtMost(YearMonth.of(today.year, startDate.month).lengthOfMonth())
+                    )
+                    !annualDate.isAfter(today)
+                }
+                else -> (startDate?.dayOfMonth ?: it.dueDay)
+                    .coerceAtMost(today.lengthOfMonth()) <= today.dayOfMonth
             }
             it.active &&
+                (startDate == null || !today.isBefore(startDate)) &&
                 isDue &&
                 it.lastProcessedPeriod != period &&
                 dao.account(it.accountId) != null
@@ -965,11 +1089,7 @@ class WalletRepository(private val database: WalletDatabase) {
 
         database.withTransaction {
             due.forEach { p ->
-                val period = when (p.frequency) {
-                    "Weekly" -> "${today.year}-W${today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)}"
-                    "Yearly" -> today.year.toString()
-                    else -> "${today.year}-${today.monthValue}"
-                }
+                val period = recurringPeriod(today, p.frequency)
                 dao.insertTransaction(
                     TransactionEntity(
                         id = "auto-${p.id}-$period",
@@ -1031,7 +1151,7 @@ class WalletRepository(private val database: WalletDatabase) {
     }
 
     fun exportCsv(state: WalletUiState): String {
-        val out = StringBuilder("record_type,id,name,kind,amount_minor,account_id,account_type,category,date,frequency,next_due,investment_type,units,current_value_minor,cost_minor,platform_account_id,investment_holding_id,investment_platform_account_id\n")
+        val out = StringBuilder("record_type,id,name,kind,amount_minor,account_id,account_type,category,date,frequency,next_due,investment_type,units,current_value_minor,cost_minor,platform_account_id,investment_holding_id,investment_platform_account_id,start_date,due_day,last_processed_period\n")
 
         state.accounts.forEach {
             out.appendLine(csv(listOf("ACCOUNT", it.id, it.name, "", it.balanceMinor.toString(), "", it.type, "", "", "", "", "", "", "", "")))
@@ -1040,7 +1160,7 @@ class WalletRepository(private val database: WalletDatabase) {
             out.appendLine(csv(listOf("TRANSACTION", it.id, it.title, it.kind.name, it.amountMinor.toString(), it.accountId, "", it.category, it.date, "", "", "", "", "", "")))
         }
         state.recurringPayments.forEach {
-            out.appendLine(csv(listOf("RECURRING", it.id, it.name, "", it.amountMinor.toString(), it.accountId, "", it.category, "", it.frequency, it.due, "", "", "", "", "", it.investmentHoldingId.orEmpty(), it.investmentPlatformAccountId.orEmpty())))
+            out.appendLine(csv(listOf("RECURRING", it.id, it.name, "", it.amountMinor.toString(), it.accountId, "", it.category, "", it.frequency, it.due, "", "", "", "", "", it.investmentHoldingId.orEmpty(), it.investmentPlatformAccountId.orEmpty(), it.startDate, it.dueDay.toString(), it.lastProcessedPeriod)))
         }
         state.holdings.forEach {
             out.appendLine(csv(listOf("INVESTMENT", it.id, it.name, "", "", "", "", "", "", "", "", it.type.name, it.units, it.valueMinor.toString(), it.costMinor.toString(), it.platformAccountId.orEmpty(), "", "")))
@@ -1095,10 +1215,11 @@ class WalletRepository(private val database: WalletDatabase) {
                     value(it, "account_id").ifBlank { "bank" },
                     value(it, "category").ifBlank { "Bills" },
                     true,
-                    5,
-                    "",
+                    value(it, "due_day").toIntOrNull() ?: 5,
+                    value(it, "last_processed_period"),
                     investmentHoldingId = value(it, "investment_holding_id").ifBlank { null },
-                    investmentPlatformAccountId = value(it, "investment_platform_account_id").ifBlank { null }
+                    investmentPlatformAccountId = value(it, "investment_platform_account_id").ifBlank { null },
+                    startDate = value(it, "start_date")
                 )
             }
         val holdings = data

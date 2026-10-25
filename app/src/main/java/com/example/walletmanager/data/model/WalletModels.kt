@@ -96,7 +96,8 @@ data class RecurringPayment(
     val cashbackMinor: Long = 0,
     val investmentType: InvestmentType = InvestmentType.MUTUAL_FUND,
     val investmentHoldingId: String? = null,
-    val investmentPlatformAccountId: String? = null
+    val investmentPlatformAccountId: String? = null,
+    val startDate: String = ""
 )
 
 data class Holding(
@@ -146,6 +147,11 @@ fun calculateFixedDepositMaturity(
     return principalMinor + interest
 }
 
+data class SavedNote(
+    val id: Long,
+    val text: String
+)
+
 data class WalletUiState(
     val route: String = "home",
     val baseCurrency: Currency = Currency.INR,
@@ -156,7 +162,7 @@ data class WalletUiState(
     val holdings: List<Holding> = emptyList(),
     val pendingIpos: List<PendingIpo> = emptyList(),
     val fixedDeposits: List<FixedDeposit> = emptyList(),
-    val notes: List<String> = emptyList(),
+    val notes: List<SavedNote> = emptyList(),
     val categories: List<Category> = emptyList(),
     val profileName: String = "Alex",
     val profileImageUri: String = "",

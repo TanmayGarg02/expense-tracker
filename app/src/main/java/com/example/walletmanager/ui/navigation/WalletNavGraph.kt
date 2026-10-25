@@ -271,7 +271,7 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
             composable<PlansRoute> {
                 PlansScreen(
                     state = state,
-                    addPlan = { name, amount, frequency, cashback, investment, accountId, investmentType, investmentHoldingId, investmentPlatformAccountId ->
+                    addPlan = { name, amount, frequency, cashback, investment, accountId, investmentType, investmentHoldingId, investmentPlatformAccountId, startDate, initialPaymentAlreadyLogged ->
                         vm.addRecurringPayment(
                             name = name,
                             amountMinor = amount,
@@ -281,10 +281,14 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
                             investmentType = investmentType,
                             category = if (investment) "Investments" else "Bills",
                             investmentHoldingId = investmentHoldingId,
-                            investmentPlatformAccountId = investmentPlatformAccountId
+                            investmentPlatformAccountId = investmentPlatformAccountId,
+                            startDate = startDate,
+                            initialPaymentAlreadyLogged = initialPaymentAlreadyLogged
                         )
                     },
-                    editPlan = vm::editRecurringPayment,
+                    editPlan = { payment, initialPaymentAlreadyLogged ->
+                        vm.editRecurringPayment(payment, initialPaymentAlreadyLogged)
+                    },
                     deletePlan = vm::deleteRecurringPayment,
                     onBack = { navController.popBackStack() },
                     togglePlan = { id ->
@@ -300,6 +304,8 @@ fun WalletNavGraph(vm: WalletViewModel = koinViewModel()) {
                     state = state,
                     setCurrency = vm::setCurrency,
                     addNote = vm::addNote,
+                    editNote = vm::editNote,
+                    deleteNote = vm::deleteNote,
                     export = { export.launch("wallet-manager-export.csv") },
                     import = {
                         import.launch(

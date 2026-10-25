@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SettingsEntity::class,
         CategoryEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class WalletDatabase : RoomDatabase() {
@@ -46,7 +46,8 @@ abstract class WalletDatabase : RoomDatabase() {
                 MIGRATION_9_10,
                 MIGRATION_10_14,
                 MIGRATION_13_14,
-                MIGRATION_14_15
+                MIGRATION_14_15,
+                MIGRATION_15_16
             ).build().also {
                 instance = it
             }
@@ -129,6 +130,12 @@ abstract class WalletDatabase : RoomDatabase() {
                         "CASE WHEN maturityDate < date('now') THEN maturityDate ELSE date('now') END " +
                         "WHERE startDate = ''"
                 )
+            }
+        }
+
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE recurring_payments ADD COLUMN startDate TEXT NOT NULL DEFAULT ''")
             }
         }
     }

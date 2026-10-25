@@ -28,7 +28,8 @@ data class RecurringPaymentEntity(
     val cashbackMinor: Long = 0,
     val investmentType: String = "MUTUAL_FUND",
     val investmentHoldingId: String? = null,
-    val investmentPlatformAccountId: String? = null
+    val investmentPlatformAccountId: String? = null,
+    @ColumnInfo(defaultValue = "''") val startDate: String = ""
 )
 
 @Entity(tableName = "holdings")

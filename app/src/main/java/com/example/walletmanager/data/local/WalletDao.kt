@@ -20,6 +20,7 @@ interface WalletDao {
     @Query("SELECT * FROM settings WHERE id = 1") fun settings(): Flow<SettingsEntity?>
     @Query("SELECT COUNT(*) FROM accounts") suspend fun accountCount(): Int
     @Query("SELECT COUNT(*) FROM categories") suspend fun categoryCount(): Int
+    @Query("SELECT EXISTS(SELECT 1 FROM accounts WHERE id LIKE 'demo-%' UNION ALL SELECT 1 FROM transactions WHERE id LIKE 'demo-%' UNION ALL SELECT 1 FROM recurring_payments WHERE id LIKE 'demo-%' UNION ALL SELECT 1 FROM holdings WHERE id LIKE 'demo-%' UNION ALL SELECT 1 FROM ipos WHERE id LIKE 'demo-%' UNION ALL SELECT 1 FROM fixed_deposits WHERE id LIKE 'demo-%')") suspend fun hasSampleData(): Boolean
     @Query("SELECT * FROM accounts WHERE id = :id") suspend fun account(id: String): AccountEntity?
     @Query("SELECT * FROM recurring_payments") suspend fun currentRecurringPayments(): List<RecurringPaymentEntity>
     @Query("SELECT * FROM transactions WHERE id = :id") suspend fun transaction(id: String): TransactionEntity?
@@ -30,6 +31,8 @@ interface WalletDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertRecurringPayments(items: List<RecurringPaymentEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertHoldings(items: List<HoldingEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertNotes(items: List<NoteEntity>)
+    @Query("UPDATE notes SET text = :text WHERE id = :id") suspend fun updateNote(id: Long, text: String)
+    @Query("DELETE FROM notes WHERE id = :id") suspend fun deleteNote(id: Long)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertCategories(items: List<CategoryEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertSettings(item: SettingsEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAccount(item: AccountEntity)
