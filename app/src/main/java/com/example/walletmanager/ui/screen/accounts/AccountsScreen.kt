@@ -1,6 +1,7 @@
 package com.example.walletmanager.ui.screen.accounts
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.expandVertically
@@ -52,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -74,6 +76,8 @@ import com.example.walletmanager.ui.component.WalletIcon
 import com.example.walletmanager.ui.component.WalletPage
 import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
+import com.example.walletmanager.ui.component.WalletDatePickerField
+import com.example.walletmanager.ui.component.formatWalletDate
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.AmountGroupingVisualTransformation
 import com.example.walletmanager.ui.component.walletDropdownItem
@@ -108,8 +112,13 @@ fun AccountsScreen(
 ) {
     var showAddSheet by rememberSaveable { mutableStateOf(false) }
     var showFixedDepositSheet by rememberSaveable { mutableStateOf(false) }
-    var fixedDepositsExpanded by rememberSaveable { mutableStateOf(true) }
+    var fixedDepositsExpanded by rememberSaveable { mutableStateOf(false) }
     var selectedFixedDeposit by remember { mutableStateOf<FixedDeposit?>(null) }
+    val fixedDepositChevronRotation by animateFloatAsState(
+        targetValue = if (fixedDepositsExpanded) 180f else 0f,
+        animationSpec = tween(260, easing = FastOutSlowInEasing),
+        label = "fixed-deposit-chevron"
+    )
 
     WalletPage(PaddingValues()) {
         Row(
@@ -180,9 +189,10 @@ fun AccountsScreen(
             Text("Fixed deposits", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
             Box(contentAlignment = Alignment.Center) {
                 WalletIcon(
-                    if (fixedDepositsExpanded) "chevron_up" else "chevron_down",
+                    "chevron_down",
                     color = WalletColors.muted,
-                    size = 18.dp
+                    size = 18.dp,
+                    modifier = Modifier.graphicsLayer { rotationZ = fixedDepositChevronRotation }
                 )
             }
         }
@@ -190,11 +200,11 @@ fun AccountsScreen(
             AnimatedVisibility(
                 visible = fixedDepositsExpanded,
                 enter = expandVertically(
-                    animationSpec = tween(140, easing = FastOutSlowInEasing)
-                ) + fadeIn(animationSpec = tween(100, easing = FastOutSlowInEasing)),
+                    animationSpec = tween(280, easing = FastOutSlowInEasing)
+                ) + fadeIn(animationSpec = tween(200, easing = FastOutSlowInEasing)),
                 exit = shrinkVertically(
-                    animationSpec = tween(110, easing = FastOutSlowInEasing)
-                ) + fadeOut(animationSpec = tween(80, easing = FastOutSlowInEasing))
+                    animationSpec = tween(240, easing = FastOutSlowInEasing)
+                ) + fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
@@ -357,6 +367,13 @@ private fun WalletAccountCard(
     state: WalletUiState,
     onClick: () -> Unit
 ) {
+    val isBankAccount = account.type.equals("Bank account", ignoreCase = true) ||
+        account.type.equals("Bank", ignoreCase = true)
+    val fixedDepositBalance = state.fixedDeposits
+        .filter { it.accountId == account.id }
+        .sumOf { it.principalMinor }
+    val displayedFixedDepositBalance = fixedDepositBalance.takeIf { isBankAccount } ?: 0L
+    val liquidBalance = (account.balanceMinor - displayedFixedDepositBalance).coerceAtLeast(0)
     val accent = when (account.accent) {
         AccountAccent.Green -> WalletGreenAccent
         AccountAccent.Purple -> Color(0xFFB29ACB)
@@ -412,13 +429,27 @@ private fun WalletAccountCard(
                 Text("WALLET", color = WalletColors.muted, fontSize = 10.sp, letterSpacing = 1.sp)
             }
 
-            Text(
-                formatMoney(account.balanceMinor, state.balancesVisible, state.baseCurrency),
-                color = WalletColors.cream,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("LIQUID BALANCE", color = accent, fontSize = 10.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    formatMoney(liquidBalance, state.balancesVisible, state.baseCurrency),
+                    color = WalletColors.cream,
+                    fontSize = 27.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                if (displayedFixedDepositBalance > 0) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Fixed deposits", color = WalletColors.muted, fontSize = 12.sp)
+                        Text(
+                            formatMoney(displayedFixedDepositBalance, state.balancesVisible, state.baseCurrency),
+                            color = WalletColors.cream,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
 
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
@@ -461,7 +492,7 @@ private fun FixedDepositRow(
                 }
             }
             Text(
-                "${deposit.interestRateBps / 100.0}% · Deposited ${deposit.startDate} · Matures ${deposit.maturityDate}",
+                "${deposit.interestRateBps / 100.0}% · Deposited ${runCatching { formatWalletDate(LocalDate.parse(deposit.startDate)) }.getOrDefault(deposit.startDate)} · Matures ${runCatching { formatWalletDate(LocalDate.parse(deposit.maturityDate)) }.getOrDefault(deposit.maturityDate)}",
                 color = WalletColors.muted
             )
             Text(
@@ -637,8 +668,11 @@ private fun FixedDepositSheet(
                 ) {
                     state.accounts.forEach { account ->
                         DropdownMenuItem(
-                            modifier = Modifier.walletDropdownItem(),
-                            text = { Text(account.name) },
+                            modifier = Modifier.walletDropdownItem(
+                                selected = account.id == accountId,
+                                accent = WalletGreenAccent
+                            ),
+                            text = { Text(account.name, color = WalletColors.cream) },
                             onClick = {
                                 accountId = account.id
                                 accountDropdownExpanded = false
@@ -648,14 +682,13 @@ private fun FixedDepositSheet(
                 }
             }
 
-            OutlinedTextField(
-                value = startDate,
-                onValueChange = {
-                    startDate = it
-                    updateCalculatedMaturity(principal, interestRate, it, maturityDate)
-                },
-                label = { Text("Deposit date (YYYY-MM-DD)") },
-                modifier = Modifier.fillMaxWidth()
+            WalletDatePickerField(
+                value = runCatching { LocalDate.parse(startDate) }.getOrDefault(LocalDate.now()),
+                label = "Deposit date",
+                onDateSelected = {
+                    startDate = it.toString()
+                    updateCalculatedMaturity(principal, interestRate, startDate, maturityDate)
+                }
             )
             OutlinedTextField(
                 value = principal,
@@ -684,14 +717,14 @@ private fun FixedDepositSheet(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
-            OutlinedTextField(
-                value = maturityDate,
-                onValueChange = {
-                    maturityDate = it
-                    updateCalculatedMaturity(principal, interestRate, startDate, it)
-                },
-                label = { Text("Maturity date (YYYY-MM-DD)") },
-                modifier = Modifier.fillMaxWidth()
+            WalletDatePickerField(
+                value = runCatching { LocalDate.parse(maturityDate) }
+                    .getOrDefault(LocalDate.now().plusYears(1)),
+                label = "Maturity date",
+                onDateSelected = {
+                    maturityDate = it.toString()
+                    updateCalculatedMaturity(principal, interestRate, startDate, maturityDate)
+                }
             )
             OutlinedTextField(
                 value = maturityAmount,

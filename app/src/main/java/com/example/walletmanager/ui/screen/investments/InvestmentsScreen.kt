@@ -71,6 +71,8 @@ import com.example.walletmanager.ui.component.WalletActionButton
 import com.example.walletmanager.ui.component.WalletConfirmDialog
 import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
+import com.example.walletmanager.ui.component.WalletDatePickerField
+import com.example.walletmanager.ui.component.formatWalletDate
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.walletDropdownItem
 import com.example.walletmanager.ui.component.walletDropdownSurface
@@ -201,7 +203,10 @@ fun InvestmentsScreen(
                     Row(Modifier.padding(16.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text(ipo.name, fontWeight = FontWeight.Bold)
-                            Text("Allotment ${ipo.allotmentDate}", color = WalletColors.muted)
+                            Text(
+                                "Allotment ${runCatching { formatWalletDate(LocalDate.parse(ipo.allotmentDate)) }.getOrDefault(ipo.allotmentDate)}",
+                                color = WalletColors.muted
+                            )
                             Text(formatMoney(ipo.amountMinor, state.balancesVisible, state.baseCurrency), fontWeight = FontWeight.Bold)
                         }
                         WalletActionButton(
@@ -574,11 +579,10 @@ private fun IpoSheet(
                 prefix = { Text("₹ ") },
                 modifier = Modifier.fillMaxWidth()
             )
-            OutlinedTextField(
-                value = date,
-                onValueChange = { date = it },
-                label = { Text("Allotment date (YYYY-MM-DD)") },
-                modifier = Modifier.fillMaxWidth()
+            WalletDatePickerField(
+                value = runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now()),
+                label = "Allotment date",
+                onDateSelected = { date = it.toString() }
             )
             Button(
                 onClick = saveIpo,
@@ -757,11 +761,11 @@ private fun InvestmentSheet(
                 ) {
                     InvestmentType.categories.forEach { option ->
                         DropdownMenuItem(
-                            modifier = Modifier.walletDropdownItem(),
+                            modifier = Modifier.walletDropdownItem(selected = option == type, accent = InvestmentPositive),
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     WalletIcon(investmentIcon(option), color = WalletColors.cream, size = 18.dp)
-                                    Text(formatInvestmentTypeName(option), modifier = Modifier.padding(start = 10.dp))
+                                    Text(formatInvestmentTypeName(option), color = WalletColors.cream, modifier = Modifier.padding(start = 10.dp))
                                 }
                             },
                             onClick = {
@@ -799,8 +803,11 @@ private fun InvestmentSheet(
                 ) {
                     platforms.forEach { platform ->
                         DropdownMenuItem(
-                            modifier = Modifier.walletDropdownItem(),
-                            text = { Text(platform.name) },
+                            modifier = Modifier.walletDropdownItem(
+                                selected = platform.id == platformAccountId,
+                                accent = InvestmentPositive
+                            ),
+                            text = { Text(platform.name, color = WalletColors.cream) },
                             onClick = {
                                 platformAccountId = platform.id
                                 expandedPlatformDropdown = false
@@ -808,8 +815,11 @@ private fun InvestmentSheet(
                         )
                     }
                     DropdownMenuItem(
-                        modifier = Modifier.walletDropdownItem(),
-                        text = { Text("Other · real estate and more") },
+                        modifier = Modifier.walletDropdownItem(
+                            selected = platformAccountId == OTHER_INVESTMENT_PLATFORM_ID,
+                            accent = InvestmentPositive
+                        ),
+                        text = { Text("Other · real estate and more", color = WalletColors.cream) },
                         onClick = {
                             platformAccountId = OTHER_INVESTMENT_PLATFORM_ID
                             expandedPlatformDropdown = false

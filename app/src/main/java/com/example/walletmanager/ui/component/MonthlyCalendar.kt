@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +26,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable
-fun MonthlyCalendar() {
+fun MonthlyCalendar(modifier: Modifier = Modifier) {
     val month = remember { YearMonth.now() }
     val today = remember { LocalDate.now() }
     val days = remember(month) {
@@ -41,7 +41,7 @@ fun MonthlyCalendar() {
     }
 
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .background(WalletSurface, RoundedCornerShape(20.dp))
             .padding(14.dp),
@@ -64,14 +64,14 @@ fun MonthlyCalendar() {
         }
         weeks.forEach { week ->
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 week.forEach { date ->
                     Box(
                         Modifier
                             .weight(1f)
-                            .aspectRatio(1.15f)
+                            .fillMaxHeight()
                             .border(
                                 width = 1.dp,
                                 color = WalletColors.divider,

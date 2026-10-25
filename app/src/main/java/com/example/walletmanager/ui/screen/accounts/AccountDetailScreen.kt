@@ -81,6 +81,10 @@ fun AccountDetailScreen(
     val transactions = remember(state.transactions, accountId) {
         state.transactions.filter { it.accountId == accountId }
     }
+    val linkedFdPrincipal = remember(state.fixedDeposits, accountId) {
+        state.fixedDeposits.filter { it.accountId == accountId }.sumOf { it.principalMinor }
+    }
+    val liquidBalance = (account?.balanceMinor?.minus(linkedFdPrincipal) ?: 0L).coerceAtLeast(0)
     val platformHoldings = remember(state.holdings, accountId) {
         state.holdings.filter { it.platformAccountId == accountId }
     }
@@ -109,10 +113,23 @@ fun AccountDetailScreen(
                 )
             }
             SummaryCard(
-                if (account.type == "Brokerage") "Free funds" else "Current balance",
-                account.balanceMinor,
+                if (account.type == "Brokerage") "Free funds" else "Current liquid balance",
+                liquidBalance,
                 state
             )
+            if (linkedFdPrincipal > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Fixed deposits", color = WalletColors.muted)
+                    Text(
+                        formatMoney(linkedFdPrincipal, state.balancesVisible, state.baseCurrency),
+                        color = WalletColors.cream,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
             if (account.type == "Brokerage") {
                 SectionTitle("Investments on this platform")
                 Row(
@@ -187,9 +204,6 @@ fun AccountDetailScreen(
     val selectedAccount = account
     if (selectedAccount != null) {
         if (showAccountEditor) {
-            val linkedFdPrincipal = state.fixedDeposits
-                .filter { it.accountId == selectedAccount.id }
-                .sumOf { it.principalMinor }
             AccountEditorSheet(
                 initial = selectedAccount,
                 linkedFdPrincipalMinor = linkedFdPrincipal,

@@ -3,9 +3,14 @@ package com.example.walletmanager.ui.screen.reports
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
@@ -112,29 +117,38 @@ fun CalendarScreen(state: WalletUiState, onBack: () -> Unit) {
             .toSortedMap(compareByDescending { it })
     }
 
-    WalletPage(PaddingValues()) {
-        ScreenHeader(
-            "Monthly calendar",
-            "Transactions for ${month.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${month.year}",
-            onBack = onBack
-        )
-        MonthlyCalendar()
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val calendarHeight = (maxHeight - 250.dp).coerceAtLeast(360.dp)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            ScreenHeader(
+                "Monthly calendar",
+                "Transactions for ${month.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${month.year}",
+                onBack = onBack
+            )
+            MonthlyCalendar(Modifier.fillMaxWidth().height(calendarHeight))
 
-        if (transactionsByDay.isEmpty()) {
-            Text("No transactions recorded this month.", color = WalletColors.muted)
-        } else {
-            transactionsByDay.forEach { (date, transactions) ->
-                SectionTitle(
-                    "${date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }}, " +
-                        "${date.dayOfMonth} " +
-                        date.month.name.lowercase().replaceFirstChar { it.uppercase() }
-                )
-                transactions.forEach { transaction ->
-                    TransactionRow(transaction, state.accounts, state.baseCurrency)
+            if (transactionsByDay.isEmpty()) {
+                Text("No transactions recorded this month.", color = WalletColors.muted)
+            } else {
+                transactionsByDay.forEach { (date, transactions) ->
+                    SectionTitle(
+                        "${date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }}, " +
+                            "${date.dayOfMonth} " +
+                            date.month.name.lowercase().replaceFirstChar { it.uppercase() }
+                    )
+                    transactions.forEach { transaction ->
+                        TransactionRow(transaction, state.accounts, state.baseCurrency)
+                    }
                 }
             }
+            Spacer(Modifier.height(84.dp))
         }
-        Spacer(Modifier.height(70.dp))
     }
 }
 

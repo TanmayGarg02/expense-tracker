@@ -49,14 +49,20 @@ import com.example.walletmanager.ui.component.WalletModalBottomSheet
 import com.example.walletmanager.ui.component.WalletSheetBackButton
 import com.example.walletmanager.ui.component.formatMoney
 import com.example.walletmanager.ui.component.rememberDebouncedClick
+import com.example.walletmanager.ui.component.WalletDatePickerField
+import com.example.walletmanager.ui.component.formatWalletDate
 import com.example.walletmanager.ui.theme.WalletGreen
 import com.example.walletmanager.ui.theme.WalletSurface
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.temporal.TemporalAdjusters
 
 @Composable
 fun PlansScreen(
     state: WalletUiState,
-    addPlan: (String, Long, String, Long, Boolean, String, InvestmentType, String?, String?) -> Unit,
-    editPlan: (RecurringPayment) -> Unit,
+    addPlan: (String, Long, String, Long, Boolean, String, InvestmentType, String?, String?, String, Boolean?) -> Unit,
+    editPlan: (RecurringPayment, Boolean?) -> Unit,
     deletePlan: (String) -> Unit,
     togglePlan: (String) -> Unit,
     onBack: () -> Unit
@@ -84,14 +90,25 @@ fun PlansScreen(
                 ) {
                     Column(Modifier.fillMaxWidth()) {
                         Text(item.name, fontWeight = FontWeight.Bold)
+                        val startDate = item.startDate.takeIf { it.isNotBlank() }
+                            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                        val nextDate = nextPaymentDate(item, LocalDate.now())
                         Text(
                             if (item.category == "Investments") {
                                 val existingFund = state.holdings.firstOrNull { it.id == item.investmentHoldingId }?.name
-                                "${investmentTypeName(item.investmentType)} SIP · ${existingFund ?: "New fund"} · ${item.frequency} · ${item.due} · ${if (item.active) "Active" else "Paused"}"
+                                "${investmentTypeName(item.investmentType)} SIP · ${existingFund ?: "New fund"} · ${item.frequency} · ${if (item.active) "Active" else "Paused"}"
                             } else {
-                                "${item.frequency} · ${item.due} · ${if (item.active) "Active" else "Paused"}"
+                                "${item.frequency} · ${if (item.active) "Active" else "Paused"}"
                             },
                             color = if (item.active) WalletGreen else WalletColors.muted
+                        )
+                        Text(
+                            buildString {
+                                if (startDate != null) append("Started ${formatWalletDate(startDate)} · ")
+                                append("Next ${formatWalletDate(nextDate)}")
+                            },
+                            color = WalletColors.muted,
+                            fontSize = 12.sp
                         )
                         Text(
                             formatMoney(item.amountMinor, state.balancesVisible, state.baseCurrency),
@@ -146,7 +163,12 @@ fun PlansScreen(
             state = state,
             initial = currentSelectedPlan,
             dismiss = { selectedPlan = null },
-            save = { name, amount, frequency, cashback, investment, accountId, investmentType, investmentHoldingId, investmentPlatformAccountId ->
+            save = { name, amount, frequency, cashback, investment, accountId, investmentType, investmentHoldingId, investmentPlatformAccountId, startDate, alreadyLogged ->
+                val changedStart = startDate.isNotBlank() && startDate != currentSelectedPlan.startDate
+                val parsedStart = startDate.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it) }
+                val dueDay = if (changedStart && parsedStart != null) {
+                    if (frequency == "Weekly") parsedStart.dayOfWeek.value else parsedStart.dayOfMonth
+                } else currentSelectedPlan.dueDay
                 editPlan(
                     currentSelectedPlan.copy(
                         name = name,
@@ -157,8 +179,12 @@ fun PlansScreen(
                         investmentType = investmentType,
                         investmentHoldingId = investmentHoldingId,
                         investmentPlatformAccountId = investmentPlatformAccountId,
+                        startDate = startDate,
+                        dueDay = dueDay,
+                        due = if (changedStart) "Day $dueDay" else currentSelectedPlan.due,
                         category = if (investment) "Investments" else "Bills"
-                    )
+                    ),
+                    alreadyLogged
                 )
             },
             delete = {
@@ -188,7 +214,7 @@ private fun PlanSheet(
     state: WalletUiState,
     initial: RecurringPayment?,
     dismiss: () -> Unit,
-    save: (String, Long, String, Long, Boolean, String, InvestmentType, String?, String?) -> Unit,
+    save: (String, Long, String, Long, Boolean, String, InvestmentType, String?, String?, String, Boolean?) -> Unit,
     delete: (() -> Unit)? = null
 ) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
@@ -210,7 +236,14 @@ private fun PlanSheet(
         )
     }
     var accountId by remember { mutableStateOf(initial?.accountId ?: state.accounts.firstOrNull()?.id.orEmpty()) }
+    val legacyStartDate = remember(initial) { legacyStartDate(initial, LocalDate.now()) }
+    var startDate by rememberSaveable(initial?.id) {
+        mutableStateOf(initial?.startDate?.takeIf { it.isNotBlank() } ?: legacyStartDate.toString())
+    }
+    var startDateChanged by rememberSaveable(initial?.id) { mutableStateOf(initial == null) }
+    var firstPaymentAlreadyLogged by rememberSaveable(initial?.id) { mutableStateOf<Boolean?>(null) }
     val savePlan = rememberDebouncedClick {
+        val savedStartDate = if (initial != null && initial.startDate.isBlank() && !startDateChanged) "" else startDate
         save(
             name,
             ((amount.toDoubleOrNull() ?: 0.0) * 100).toLong(),
@@ -220,7 +253,9 @@ private fun PlanSheet(
             accountId,
             investmentType,
             investmentHoldingId.takeIf { investment && it.isNotBlank() },
-            investmentPlatformAccountId.takeIf { investment }
+            investmentPlatformAccountId.takeIf { investment },
+            savedStartDate,
+            firstPaymentAlreadyLogged
         )
         dismiss()
     }
@@ -373,6 +408,36 @@ private fun PlanSheet(
                     )
                 }
             }
+            WalletDatePickerField(
+                value = runCatching { LocalDate.parse(startDate) }.getOrDefault(LocalDate.now()),
+                label = "Starting date",
+                onDateSelected = {
+                    startDate = it.toString()
+                    startDateChanged = initial == null || initial.startDate.isBlank() || it.toString() != initial.startDate
+                    firstPaymentAlreadyLogged = null
+                }
+            )
+            val selectedStartDate = runCatching { LocalDate.parse(startDate) }.getOrDefault(LocalDate.now())
+            val needsPastPaymentAnswer = selectedStartDate.isBefore(LocalDate.now()) &&
+                (initial == null || startDateChanged)
+            if (needsPastPaymentAnswer) {
+                Text(
+                    "Was the first payment on ${formatWalletDate(selectedStartDate)} already recorded in transactions?",
+                    color = WalletColors.muted
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = firstPaymentAlreadyLogged == true,
+                        onClick = { firstPaymentAlreadyLogged = true },
+                        label = { Text("Yes, already recorded") }
+                    )
+                    FilterChip(
+                        selected = firstPaymentAlreadyLogged == false,
+                        onClick = { firstPaymentAlreadyLogged = false },
+                        label = { Text("No, not recorded") }
+                    )
+                }
+            }
             if (!investment) {
                 OutlinedTextField(
                     value = cashback,
@@ -412,7 +477,8 @@ private fun PlanSheet(
             }
             Button(
                 onClick = savePlan,
-                enabled = name.isNotBlank() && amount.toDoubleOrNull()?.let { it > 0 } == true && accountId.isNotBlank(),
+                enabled = name.isNotBlank() && amount.toDoubleOrNull()?.let { it > 0 } == true &&
+                    accountId.isNotBlank() && (!needsPastPaymentAnswer || firstPaymentAlreadyLogged != null),
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(WalletColors.cream)
             ) {
@@ -442,6 +508,64 @@ private fun PlanSheet(
                 ) {
                     Text("Cancel", color = WalletColors.cream)
                 }
+            }
+        }
+    }
+}
+
+private fun legacyStartDate(payment: RecurringPayment?, today: LocalDate): LocalDate {
+    if (payment == null) return today
+    return when (payment.frequency) {
+        "Weekly" -> today.with(TemporalAdjusters.nextOrSame(DayOfWeek.of(payment.dueDay.coerceIn(1, 7))))
+        "Yearly" -> LocalDate.of(today.year, 1, payment.dueDay.coerceIn(1, 31))
+        else -> YearMonth.from(today).atDay(payment.dueDay.coerceIn(1, YearMonth.from(today).lengthOfMonth()))
+    }
+}
+
+private fun nextPaymentDate(payment: RecurringPayment, today: LocalDate): LocalDate {
+    val start = payment.startDate.takeIf { it.isNotBlank() }
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    if (start == null) {
+        return when (payment.frequency) {
+            "Weekly" -> {
+                val next = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.of(payment.dueDay.coerceIn(1, 7))))
+                if (next.isAfter(today)) next else next.plusWeeks(1)
+            }
+            "Yearly" -> {
+                val candidate = LocalDate.of(today.year, 1, payment.dueDay.coerceIn(1, 31))
+                if (candidate.isAfter(today)) candidate else candidate.plusYears(1)
+            }
+            else -> {
+                val currentMonth = YearMonth.from(today)
+                val candidate = currentMonth.atDay(payment.dueDay.coerceIn(1, currentMonth.lengthOfMonth()))
+                if (candidate.isAfter(today)) candidate else {
+                    val nextMonth = currentMonth.plusMonths(1)
+                    nextMonth.atDay(payment.dueDay.coerceIn(1, nextMonth.lengthOfMonth()))
+                }
+            }
+        }
+    }
+    if (start.isAfter(today)) return start
+    return when (payment.frequency) {
+        "Weekly" -> {
+            val weeksSinceStart = java.time.temporal.ChronoUnit.WEEKS.between(start, today)
+            val candidate = start.plusWeeks(weeksSinceStart)
+            if (candidate.isAfter(today)) candidate else candidate.plusWeeks(1)
+        }
+        "Yearly" -> {
+            val thisYear = YearMonth.of(today.year, start.month)
+                .atDay(start.dayOfMonth.coerceAtMost(YearMonth.of(today.year, start.month).lengthOfMonth()))
+            if (thisYear.isAfter(today)) thisYear else {
+                val nextYearMonth = YearMonth.of(today.year + 1, start.month)
+                nextYearMonth.atDay(start.dayOfMonth.coerceAtMost(nextYearMonth.lengthOfMonth()))
+            }
+        }
+        else -> {
+            val currentMonth = YearMonth.from(today)
+            val candidate = currentMonth.atDay(start.dayOfMonth.coerceAtMost(currentMonth.lengthOfMonth()))
+            if (candidate.isAfter(today)) candidate else {
+                val nextMonth = currentMonth.plusMonths(1)
+                nextMonth.atDay(start.dayOfMonth.coerceAtMost(nextMonth.lengthOfMonth()))
             }
         }
     }
