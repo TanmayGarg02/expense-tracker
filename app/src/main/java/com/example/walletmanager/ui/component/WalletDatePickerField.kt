@@ -30,6 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,16 +57,26 @@ fun WalletDatePickerField(
     modifier: Modifier = Modifier
 ) {
     var showPicker by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = formatWalletDate(value),
-        onValueChange = {},
-        readOnly = true,
-        label = { Text(label) },
-        trailingIcon = { WalletIcon("calendar", color = WalletColors.muted, size = 18.dp) },
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { showPicker = true }
-    )
+    Box(modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = formatWalletDate(value),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { WalletIcon("calendar", color = WalletColors.muted, size = 18.dp) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { showPicker = true }
+                .semantics {
+                    contentDescription = "$label, ${formatWalletDate(value)}"
+                    role = Role.Button
+                }
+        )
+    }
 
     if (showPicker) {
         Dialog(onDismissRequest = { showPicker = false }) {
